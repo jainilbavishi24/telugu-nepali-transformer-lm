@@ -4,10 +4,9 @@ import re
 import unicodedata
 from collections import Counter
 
-
-INPUT_FILE = "telugu_wikipedia_basic_filtered.jsonl"
-OUTPUT_FILE = "telugu_wikipedia_exact_dedup.jsonl"
-STATS_FILE = "exact_dedup_stats.json"
+INPUT_FILE = "sangraha_verified_tel_sample_basic_filtered.jsonl"
+OUTPUT_FILE = "sangraha_verified_tel_sample_exact_dedup.jsonl"
+STATS_FILE = "sangraha_exact_dedup_stats.json"
 
 
 # ============================================================

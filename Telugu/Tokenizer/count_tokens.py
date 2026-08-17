@@ -8,10 +8,10 @@ import sentencepiece as spm
 # CONFIGURATION
 # ============================================================
 
-INPUT_FILE = "telugu_wikipedia_quality_filtered.jsonl"
+INPUT_FILE = "telugu_combined_corpus.jsonl"
 
 MODEL_FILE = (
-    "telugu_sentencepiece_bpe_8k/"
+    "Telugu/telugu_sentencepiece_bpe_8k/"
     "telugu_bpe_8k.model"
 )
 
