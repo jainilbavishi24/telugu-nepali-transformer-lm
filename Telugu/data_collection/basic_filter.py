@@ -4,16 +4,16 @@ import unicodedata
 from collections import Counter
 
 
-INPUT_FILE = "telugu_wikitionary_clean.jsonl"
-OUTPUT_FILE = "telugu_wikitionary_basic_filtered.jsonl"
-STATS_FILE = "telugu_wikitionary_basic_filter_stats.json"
+INPUT_FILE = "sangraha_verified_tel_500k.jsonl"
+OUTPUT_FILE = "sangraha_verified_tel_500k_basic_filtered.jsonl"
+STATS_FILE = "sangraha_verified_tel_500k_basic_filter_stats.json"
 
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
 # Minimum number of characters in a document.
-MIN_CHARS = 20
+MIN_CHARS = 200
 
 # Minimum fraction of alphabetic/script characters that should
 # be Telugu Unicode characters.

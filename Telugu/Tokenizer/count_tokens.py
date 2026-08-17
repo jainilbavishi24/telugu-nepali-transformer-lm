@@ -8,7 +8,7 @@ import sentencepiece as spm
 # CONFIGURATION
 # ============================================================
 
-INPUT_FILE = "telugu_combined_corpus_v3.jsonl"
+INPUT_FILE = "telugu_combined_corpus_v4.jsonl"
 
 MODEL_FILE = (
     "Telugu/telugu_sentencepiece_bpe_8k/"

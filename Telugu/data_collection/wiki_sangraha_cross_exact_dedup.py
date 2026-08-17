@@ -11,15 +11,15 @@ from collections import Counter
 
 # Existing corpus:
 # Wikipedia + Sangraha
-COMBINED_CORPUS_FILE = "telugu_combined_corpus_v2.jsonl"
+COMBINED_CORPUS_FILE = "telugu_combined_corpus_v3.jsonl"
 
 # New corpus to compare against the existing corpus
-WIKISOURCE_FILE = "telugu_wikitionary_quality_filtered.jsonl"
+WIKISOURCE_FILE = "sangraha_verified_tel_500k_quality_filtered.jsonl"
 
 # Wikisource after removing exact overlaps
-OUTPUT_FILE = "telugu_wikitionary_cross_dedup.jsonl"
+OUTPUT_FILE = "sangraha_verified_tel_500k_cross_dedup.jsonl"
 
-STATS_FILE = "wikitionary_cross_dataset_exact_dedup_stats.json"
+STATS_FILE = "sangraha_verified_tel_500k_exact_dedup_stats.json"
 
 
 # ============================================================

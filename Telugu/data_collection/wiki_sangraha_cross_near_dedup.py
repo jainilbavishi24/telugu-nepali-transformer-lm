@@ -10,14 +10,14 @@ from datasketch import MinHash, MinHashLSH
 # CONFIGURATION
 # ============================================================
 
-WIKIPEDIA_FILE = "telugu_combined_corpus_v2.jsonl"
+WIKIPEDIA_FILE = "telugu_combined_corpus_v3.jsonl"
 
 SANGRAHA_FILE = (
-    "telugu_wikitionary_cross_dedup.jsonl"
+    "sangraha_verified_tel_500k_cross_dedup.jsonl"
 )
 
-PAIRS_FILE = "wikitionary_cross_near_duplicate_pairs.json"
-STATS_FILE = "wikitionary_cross_near_dedup_stats.json"
+PAIRS_FILE = "sangraha_verified_tel_500k_near_duplicate_pairs.json"
+STATS_FILE = "sangraha_verified_tel_500k_near_dedup_stats.json"
 
 
 # ------------------------------------------------------------

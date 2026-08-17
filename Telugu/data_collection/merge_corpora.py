@@ -6,15 +6,15 @@ from collections import Counter
 # INPUT / OUTPUT FILES
 # ============================================================
 
-WIKIPEDIA_FILE = "telugu_combined_corpus_v2.jsonl"
+WIKIPEDIA_FILE = "telugu_combined_corpus_v3.jsonl"
 
 SANGRAHA_FILE = (
-    "telugu_wikitionary_cross_dedup.jsonl"
+    "sangraha_verified_tel_500k_cross_dedup.jsonl"
 )
 
-OUTPUT_FILE = "telugu_combined_corpus_v3.jsonl"
+OUTPUT_FILE = "telugu_combined_corpus_v4.jsonl"
 
-STATS_FILE = "merge_corpora_stats_v3.json"
+STATS_FILE = "merge_corpora_stats_v4.json"
 
 
 # ============================================================
@@ -139,7 +139,7 @@ def process_sangraha(outfile, stats):
 
                 "text": text,
 
-                "source": "wikitionary"
+                "source": "sangraha"
             }
 
             # Optional metadata
