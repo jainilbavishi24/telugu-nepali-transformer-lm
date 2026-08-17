@@ -6,15 +6,15 @@ from collections import Counter
 # INPUT / OUTPUT FILES
 # ============================================================
 
-WIKIPEDIA_FILE = "telugu_wikipedia_quality_filtered.jsonl"
+WIKIPEDIA_FILE = "telugu_combined_corpus_v1.jsonl"
 
 SANGRAHA_FILE = (
-    "sangraha_verified_tel_cross_dedup.jsonl"
+    "telugu_wikisource_cross_dedup.jsonl"
 )
 
-OUTPUT_FILE = "telugu_combined_corpus.jsonl"
+OUTPUT_FILE = "telugu_combined_corpus_v2.jsonl"
 
-STATS_FILE = "merge_corpora_stats.json"
+STATS_FILE = "merge_corpora_stats_v2.json"
 
 
 # ============================================================
@@ -66,7 +66,10 @@ def process_wikipedia(outfile, stats):
 
                 "text": text,
 
-                "source": "wikipedia"
+                "source": record.get(
+                    "source",
+                    "unknown"
+                )
             }
 
             outfile.write(
@@ -136,7 +139,7 @@ def process_sangraha(outfile, stats):
 
                 "text": text,
 
-                "source": "sangraha"
+                "source": "wikisource"
             }
 
             # Optional metadata

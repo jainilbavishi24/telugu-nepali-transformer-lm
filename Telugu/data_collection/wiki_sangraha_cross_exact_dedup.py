@@ -9,17 +9,17 @@ from collections import Counter
 # FILES
 # ============================================================
 
-WIKIPEDIA_FILE = "telugu_wikipedia_quality_filtered.jsonl"
+# Existing corpus:
+# Wikipedia + Sangraha
+COMBINED_CORPUS_FILE = "telugu_combined_corpus_v1.jsonl"
 
-SANGRAHA_FILE = (
-    "sangraha_verified_tel_sample_quality_filtered.jsonl"
-)
+# New corpus to compare against the existing corpus
+WIKISOURCE_FILE = "telugu_wikisource_quality_filtered.jsonl"
 
-OUTPUT_FILE = (
-    "sangraha_verified_tel_cross_dedup.jsonl"
-)
+# Wikisource after removing exact overlaps
+OUTPUT_FILE = "telugu_wikisource_cross_dedup.jsonl"
 
-STATS_FILE = "cross_dataset_exact_dedup_stats.json"
+STATS_FILE = "wikisource_cross_dataset_exact_dedup_stats.json"
 
 
 # ============================================================
@@ -34,8 +34,10 @@ def normalize_for_dedup(text):
     whitespace are treated as exact duplicates.
     """
 
+    # Unicode normalization
     text = unicodedata.normalize("NFC", text)
 
+    # Normalize all whitespace
     text = re.sub(
         r"\s+",
         " ",
@@ -59,21 +61,21 @@ def get_document_hash(text):
 
 
 # ============================================================
-# LOAD WIKIPEDIA HASHES
+# LOAD EXISTING CORPUS HASHES
 # ============================================================
 
-def load_wikipedia_hashes():
+def load_existing_hashes():
 
     print("=" * 60)
-    print("LOADING WIKIPEDIA HASHES")
+    print("LOADING EXISTING CORPUS HASHES")
     print("=" * 60)
 
-    wikipedia_hashes = set()
+    existing_hashes = set()
 
     counts = Counter()
 
     with open(
-        WIKIPEDIA_FILE,
+        COMBINED_CORPUS_FILE,
         "r",
         encoding="utf-8"
     ) as infile:
@@ -99,7 +101,7 @@ def load_wikipedia_hashes():
 
             doc_hash = get_document_hash(text)
 
-            wikipedia_hashes.add(doc_hash)
+            existing_hashes.add(doc_hash)
 
             counts["loaded"] += 1
 
@@ -107,29 +109,29 @@ def load_wikipedia_hashes():
 
                 print(
                     f"Processed: {counts['total']:,} | "
-                    f"Hashes: {len(wikipedia_hashes):,}"
+                    f"Unique hashes: {len(existing_hashes):,}"
                 )
 
     print()
 
     print(
-        f"Wikipedia documents processed: "
+        f"Existing corpus documents processed: "
         f"{counts['total']:,}"
     )
 
     print(
-        f"Unique Wikipedia hashes: "
-        f"{len(wikipedia_hashes):,}"
+        f"Unique document hashes: "
+        f"{len(existing_hashes):,}"
     )
 
-    return wikipedia_hashes, counts
+    return existing_hashes, counts
 
 
 # ============================================================
-# DEDUPLICATE SANGRAHA AGAINST WIKIPEDIA
+# DEDUPLICATE WIKISOURCE AGAINST EXISTING CORPUS
 # ============================================================
 
-def deduplicate_sangraha(wikipedia_hashes):
+def deduplicate_wikisource(existing_hashes):
 
     print("\n" + "=" * 60)
     print("CROSS-DATASET EXACT DEDUPLICATION")
@@ -142,7 +144,7 @@ def deduplicate_sangraha(wikipedia_hashes):
     overlap_characters = 0
 
     with open(
-        SANGRAHA_FILE,
+        WIKISOURCE_FILE,
         "r",
         encoding="utf-8"
     ) as infile, open(
@@ -165,20 +167,20 @@ def deduplicate_sangraha(wikipedia_hashes):
 
             text = record.get("text", "")
 
-            input_characters += len(text)
-
             if not text or not text.strip():
 
                 counts["empty"] += 1
                 continue
 
+            input_characters += len(text)
+
             doc_hash = get_document_hash(text)
 
             # ------------------------------------------------
-            # Check overlap with Wikipedia
+            # Check overlap with existing corpus
             # ------------------------------------------------
 
-            if doc_hash in wikipedia_hashes:
+            if doc_hash in existing_hashes:
 
                 counts["overlap"] += 1
                 overlap_characters += len(text)
@@ -235,32 +237,34 @@ def main():
 
     # --------------------------------------------------------
     # STEP 1
+    # Load hashes from existing corpus
     # --------------------------------------------------------
 
-    wikipedia_hashes, wiki_counts = (
-        load_wikipedia_hashes()
+    existing_hashes, existing_counts = (
+        load_existing_hashes()
     )
 
     # --------------------------------------------------------
     # STEP 2
+    # Deduplicate Wikisource
     # --------------------------------------------------------
 
     (
-        sangraha_counts,
+        wikisource_counts,
         input_characters,
         output_characters,
         overlap_characters
-    ) = deduplicate_sangraha(
-        wikipedia_hashes
+    ) = deduplicate_wikisource(
+        existing_hashes
     )
 
     # --------------------------------------------------------
     # STATISTICS
     # --------------------------------------------------------
 
-    total = sangraha_counts["total"]
-    overlap = sangraha_counts["overlap"]
-    kept = sangraha_counts["kept"]
+    total = wikisource_counts["total"]
+    overlap = wikisource_counts["overlap"]
+    kept = wikisource_counts["kept"]
 
     overlap_percentage = (
         overlap / total * 100
@@ -269,32 +273,66 @@ def main():
     )
 
     stats = {
-        "wikipedia_file": WIKIPEDIA_FILE,
-        "sangraha_file": SANGRAHA_FILE,
+
+        "existing_corpus_file": COMBINED_CORPUS_FILE,
+
+        "wikisource_file": WIKISOURCE_FILE,
+
         "output_file": OUTPUT_FILE,
 
-        "wikipedia": {
-            "documents_processed": wiki_counts["total"],
-            "unique_hashes": len(wikipedia_hashes),
-            "invalid_json": wiki_counts["invalid_json"],
-            "empty": wiki_counts["empty"]
+        "existing_corpus": {
+
+            "documents_processed":
+                existing_counts["total"],
+
+            "unique_hashes":
+                len(existing_hashes),
+
+            "invalid_json":
+                existing_counts["invalid_json"],
+
+            "empty":
+                existing_counts["empty"]
         },
 
-        "sangraha": {
-            "documents_processed": total,
-            "documents_kept": kept,
-            "exact_overlaps_removed": overlap,
-            "invalid_json": sangraha_counts["invalid_json"],
-            "empty": sangraha_counts["empty"],
-            "overlap_percentage": overlap_percentage
+        "wikisource": {
+
+            "documents_processed":
+                total,
+
+            "documents_kept":
+                kept,
+
+            "exact_overlaps_removed":
+                overlap,
+
+            "invalid_json":
+                wikisource_counts["invalid_json"],
+
+            "empty":
+                wikisource_counts["empty"],
+
+            "overlap_percentage":
+                overlap_percentage
         },
 
         "characters": {
-            "input": input_characters,
-            "output": output_characters,
-            "overlap_characters_removed": overlap_characters
+
+            "input":
+                input_characters,
+
+            "output":
+                output_characters,
+
+            "overlap_characters_removed":
+                overlap_characters
         }
     }
+
+
+    # --------------------------------------------------------
+    # SAVE STATISTICS
+    # --------------------------------------------------------
 
     with open(
         STATS_FILE,
@@ -309,6 +347,7 @@ def main():
             indent=4
         )
 
+
     # --------------------------------------------------------
     # SUMMARY
     # --------------------------------------------------------
@@ -317,19 +356,20 @@ def main():
     print("CROSS-DATASET EXACT DEDUPLICATION COMPLETE")
     print("=" * 60)
 
-    print("\nWikipedia:")
+    print("\nExisting corpus:")
 
     print(
         f"Documents processed : "
-        f"{wiki_counts['total']:,}"
+        f"{existing_counts['total']:,}"
     )
 
     print(
         f"Unique hashes       : "
-        f"{len(wikipedia_hashes):,}"
+        f"{len(existing_hashes):,}"
     )
 
-    print("\nSangraha:")
+
+    print("\nWikisource:")
 
     print(
         f"Documents processed : "
@@ -351,6 +391,7 @@ def main():
         f"{overlap_percentage:.4f}%"
     )
 
+
     print("\nCharacter statistics:")
 
     print(
@@ -367,6 +408,7 @@ def main():
         f"Overlap characters removed: "
         f"{overlap_characters:,}"
     )
+
 
     print(
         f"\nOutput saved to: "

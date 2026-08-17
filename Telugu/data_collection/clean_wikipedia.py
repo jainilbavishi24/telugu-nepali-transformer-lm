@@ -1,55 +1,75 @@
 import json
 import re
+from collections import Counter
 
 
-INPUT_FILE = "telugu_wikipedia_raw.jsonl"
-OUTPUT_FILE = "telugu_wikipedia_clean.jsonl"
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+INPUT_FILE = "telugu_wikisource_raw.jsonl"
+
+OUTPUT_FILE = "telugu_wikisource_clean.jsonl"
+
+MIN_CHARS = 100
 
 
-# ------------------------------------------------------------
-# Remove balanced Wikipedia templates
-# Example:
-# {{Infobox person
-# | name = ...
-# | birth_date = ...
-# }}
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE BALANCED TEMPLATES
+# ============================================================
 
 def remove_templates(text):
+    """
+    Remove balanced {{ ... }} templates.
+
+    Supports nested templates.
+
+    If an unmatched '{{' is found, we stop instead of truncating
+    the rest of the document.
+    """
+
     while "{{" in text:
+
         start = text.find("{{")
 
         depth = 0
         end = None
 
         for i in range(start, len(text) - 1):
+
             if text[i:i + 2] == "{{":
+
                 depth += 1
 
             elif text[i:i + 2] == "}}":
+
                 depth -= 1
 
                 if depth == 0:
+
                     end = i + 2
                     break
 
+        # ----------------------------------------------------
+        # Unmatched template
+        # ----------------------------------------------------
+
         if end is None:
-            # Unmatched template
-            text = text[:start]
             break
 
+        # Remove the balanced template
         text = text[:start] + text[end:]
 
     return text
 
 
-# ------------------------------------------------------------
-# Remove <ref>...</ref>
-# Also handles self-closing references:
-# <ref name="something" />
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE REFERENCES
+# ============================================================
 
 def remove_references(text):
+
+    # <ref> ... </ref>
     text = re.sub(
         r"<ref\b[^>]*>.*?</ref\s*>",
         "",
@@ -57,6 +77,7 @@ def remove_references(text):
         flags=re.DOTALL | re.IGNORECASE
     )
 
+    # <ref name="..." />
     text = re.sub(
         r"<ref\b[^>]*/>",
         "",
@@ -67,12 +88,12 @@ def remove_references(text):
     return text
 
 
-# ------------------------------------------------------------
-# Remove HTML comments
-# <!-- some comment -->
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE HTML COMMENTS
+# ============================================================
 
 def remove_comments(text):
+
     return re.sub(
         r"<!--.*?-->",
         "",
@@ -81,64 +102,53 @@ def remove_comments(text):
     )
 
 
-# ------------------------------------------------------------
-# Convert Wikipedia links
-#
-# [[Hyderabad]]
-#       -> Hyderabad
-#
-# [[Hyderabad|హైదరాబాద్]]
-#       -> హైదరాబాద్
-#
-# [[Telugu language#History|చరిత్ర]]
-#       -> చరిత్ర
-# ------------------------------------------------------------
+# ============================================================
+# CLEAN INTERNAL WIKI LINKS
+# ============================================================
 
 def clean_wiki_links(text):
 
     def replace_link(match):
+
         content = match.group(1)
 
         # [[target|display text]]
         if "|" in content:
+
             display = content.split("|")[-1]
+
         else:
+
             display = content
 
         # Remove section fragment
-        display = display.split("#")[-1]
+        if "#" in display:
+
+            display = display.split("#")[-1]
 
         return display
 
-    text = re.sub(
+    return re.sub(
         r"\[\[([^\[\]]+)\]\]",
         replace_link,
         text
     )
 
-    return text
 
-
-# ------------------------------------------------------------
-# External links
-#
-# [https://example.com Example website]
-#       -> Example website
-#
-# [https://example.com]
-#       -> ""
-# ------------------------------------------------------------
+# ============================================================
+# CLEAN EXTERNAL LINKS
+# ============================================================
 
 def clean_external_links(text):
 
-    # [URL display text]
+    # [https://example.com Display Text]
     text = re.sub(
         r"\[https?://[^\s\]]+\s+([^\]]+)\]",
         r"\1",
         text
     )
 
-    # [URL]
+    # [https://example.com]
     text = re.sub(
         r"\[https?://[^\s\]]+\]",
         "",
@@ -148,14 +158,12 @@ def clean_external_links(text):
     return text
 
 
-# ------------------------------------------------------------
-# Remove file/image links
-#
-# [[File:Something.jpg|thumb|caption]]
-# [[చిత్రం:Something.jpg]]
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE FILE / IMAGE LINKS
+# ============================================================
 
 def remove_files(text):
+
     pattern = (
         r"\[\[(?:File|Image|చిత్రం)"
         r":[^\[\]]+\]\]"
@@ -169,14 +177,12 @@ def remove_files(text):
     )
 
 
-# ------------------------------------------------------------
-# Remove categories
-#
-# [[Category:Telugu people]]
-# [[వర్గం:...]]
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE CATEGORIES
+# ============================================================
 
 def remove_categories(text):
+
     pattern = (
         r"\[\[(?:Category|వర్గం)"
         r":[^\[\]]+\]\]"
@@ -190,17 +196,12 @@ def remove_categories(text):
     )
 
 
-# ------------------------------------------------------------
-# Remove HTML tags
-#
-# <div>
-# </div>
-# <br>
-# <small>
-# etc.
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE HTML TAGS
+# ============================================================
 
 def remove_html(text):
+
     return re.sub(
         r"<[^>]+>",
         "",
@@ -208,38 +209,25 @@ def remove_html(text):
     )
 
 
-# ------------------------------------------------------------
-# Remove common Wikipedia formatting
-#
-# '''bold''' -> bold
-# ''italic'' -> italic
-# '''''bold italic''''' -> bold italic
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE BOLD / ITALIC MARKUP
+# ============================================================
 
 def remove_formatting(text):
 
-    # Bold + italic
     text = text.replace("'''''", "")
-
-    # Bold
     text = text.replace("'''", "")
-
-    # Italic
     text = text.replace("''", "")
 
     return text
 
 
-# ------------------------------------------------------------
-# Clean headings
-#
-# == History ==
-# === Early history ===
-#
-# We keep the heading text but remove the "=" characters.
-# ------------------------------------------------------------
+# ============================================================
+# CLEAN HEADINGS
+# ============================================================
 
 def clean_headings(text):
+
     return re.sub(
         r"(?m)^\s*=+\s*(.*?)\s*=+\s*$",
         r"\1",
@@ -247,46 +235,37 @@ def clean_headings(text):
     )
 
 
-# ------------------------------------------------------------
-# Remove Wikipedia table markup
-#
-# {| class="wikitable"
-# |-
-# | something
-# |}
-#
-# This is intentionally simple. Tables are usually noisy
-# for language-model pretraining.
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE TABLES
+# ============================================================
 
 def remove_tables(text):
+
     while "{|" in text:
 
         start = text.find("{|")
+
         end = text.find("|}", start)
 
+        # If unmatched, don't destroy the remainder
         if end == -1:
-            text = text[:start]
             break
 
-        text = text[:start] + text[end + 2:]
+        text = (
+            text[:start]
+            +
+            text[end + 2:]
+        )
 
     return text
 
 
-# ------------------------------------------------------------
-# Remove list markup
-#
-# * item
-# ** sub-item
-# # numbered item
-# ; definition
-# : description
-#
-# We retain the actual text.
-# ------------------------------------------------------------
+# ============================================================
+# CLEAN LIST MARKERS
+# ============================================================
 
 def clean_list_markers(text):
+
     return re.sub(
         r"(?m)^\s*[*#:;]+\s*",
         "",
@@ -294,40 +273,45 @@ def clean_list_markers(text):
     )
 
 
-# ------------------------------------------------------------
-# Remove leftover Wikipedia-specific constructs
-# ------------------------------------------------------------
+# ============================================================
+# REMOVE MISCELLANEOUS MARKUP
+# ============================================================
 
 def remove_misc_markup(text):
 
     # HTML entities
-    text = re.sub(r"&nbsp;", " ", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"&nbsp;",
+        " ",
+        text,
+        flags=re.IGNORECASE
+    )
 
-    # Remaining external URLs
+    # Remaining URLs
     text = re.sub(
         r"https?://\S+",
         "",
         text
     )
 
-    # Remaining square brackets
+    # Remove remaining brackets
     text = text.replace("[", "")
     text = text.replace("]", "")
 
     return text
 
 
-# ------------------------------------------------------------
-# Normalize whitespace
-# ------------------------------------------------------------
+# ============================================================
+# NORMALIZE WHITESPACE
+# ============================================================
 
 def normalize_whitespace(text):
 
-    # Normalize different newline styles
+    # Normalize line endings
     text = text.replace("\r\n", "\n")
     text = text.replace("\r", "\n")
 
-    # Remove trailing whitespace
+    # Collapse spaces and tabs
     text = re.sub(
         r"[ \t]+",
         " ",
@@ -351,66 +335,79 @@ def normalize_whitespace(text):
     return text.strip()
 
 
-# ------------------------------------------------------------
-# Main cleaning pipeline
-# ------------------------------------------------------------
+# ============================================================
+# MAIN CLEANING PIPELINE
+# ============================================================
 
 def clean_text(text):
 
-    # 1. Remove comments
+    # 1. Comments
     text = remove_comments(text)
 
-    # 2. Remove templates / infoboxes
+    # 2. Templates
     text = remove_templates(text)
 
-    # 3. Remove references
+    # 3. References
     text = remove_references(text)
 
-    # 4. Remove tables
+    # 4. Tables
     text = remove_tables(text)
 
-    # 5. Remove images/files
+    # 5. Files/images
     text = remove_files(text)
 
-    # 6. Remove categories
+    # 6. Categories
     text = remove_categories(text)
 
-    # 7. Convert internal Wikipedia links to plain text
+    # 7. Internal links
     text = clean_wiki_links(text)
 
-    # 8. Convert external links to display text
+    # 8. External links
     text = clean_external_links(text)
 
-    # 9. Remove HTML
+    # 9. HTML
     text = remove_html(text)
 
-    # 10. Remove bold / italic markup
+    # 10. Formatting
     text = remove_formatting(text)
 
-    # 11. Clean headings
+    # 11. Headings
     text = clean_headings(text)
 
-    # 12. Remove list markers
+    # 12. Lists
     text = clean_list_markers(text)
 
-    # 13. Remove miscellaneous leftover markup
+    # 13. Miscellaneous markup
     text = remove_misc_markup(text)
 
-    # 14. Normalize whitespace
+    # 14. Whitespace
     text = normalize_whitespace(text)
 
     return text
 
 
-# ------------------------------------------------------------
-# Process JSONL
-# ------------------------------------------------------------
+# ============================================================
+# PROCESS FILE
+# ============================================================
 
 def process_file():
 
     total = 0
     kept = 0
     removed = 0
+
+    # Removal diagnostics
+    removal_reasons = Counter()
+
+    # Namespace diagnostics
+    kept_by_namespace = Counter()
+    removed_by_namespace = Counter()
+    total_by_namespace = Counter()
+
+    # Character statistics
+    input_chars = 0
+    output_chars = 0
+
 
     with open(
         INPUT_FILE,
@@ -426,52 +423,289 @@ def process_file():
 
             total += 1
 
-            record = json.loads(line)
+            try:
 
-            title = record["title"]
-            text = record["text"]
+                record = json.loads(line)
+
+            except json.JSONDecodeError:
+
+                removed += 1
+                removal_reasons["invalid_json"] += 1
+
+                continue
+
+
+            title = record.get("title", "")
+            text = record.get("text", "")
+            namespace = record.get(
+                "namespace",
+                "unknown"
+            )
+
+            namespace = str(namespace)
+
+            total_by_namespace[
+                namespace
+            ] += 1
+
+
+            # ------------------------------------------------
+            # Input characters
+            # ------------------------------------------------
+
+            input_chars += len(text)
+
+
+            # ------------------------------------------------
+            # Clean
+            # ------------------------------------------------
 
             cleaned = clean_text(text)
 
-            # Remove articles that become empty after cleaning
+
+            # ------------------------------------------------
+            # Empty after cleaning
+            # ------------------------------------------------
+
             if not cleaned.strip():
+
                 removed += 1
+
+                removal_reasons[
+                    "empty_after_cleaning"
+                ] += 1
+
+                removed_by_namespace[
+                    namespace
+                ] += 1
+
                 continue
 
-            # Remove extremely short articles
-            # You can change this threshold later.
-            if len(cleaned) < 100:
+
+            # ------------------------------------------------
+            # Too short
+            # ------------------------------------------------
+
+            if len(cleaned) < MIN_CHARS:
+
                 removed += 1
+
+                removal_reasons[
+                    "too_short"
+                ] += 1
+
+                removed_by_namespace[
+                    namespace
+                ] += 1
+
                 continue
+
+
+            # ------------------------------------------------
+            # Save cleaned record
+            # ------------------------------------------------
 
             output_record = {
-                "id": record["id"],
+
+                "id": record.get("id"),
+
                 "title": title,
+
                 "text": cleaned,
-                "source": "telugu_wikipedia"
+
+                "namespace": (
+                    int(namespace)
+                    if namespace.isdigit()
+                    else namespace
+                ),
+
+                "source": "telugu_wikisource"
             }
 
+
             outfile.write(
+
                 json.dumps(
                     output_record,
                     ensure_ascii=False
-                ) + "\n"
+                )
+
+                + "\n"
             )
+
 
             kept += 1
 
-            if kept % 1000 == 0:
+            kept_by_namespace[
+                namespace
+            ] += 1
+
+            output_chars += len(cleaned)
+
+
+            # ------------------------------------------------
+            # Progress
+            # ------------------------------------------------
+
+            if total % 5000 == 0:
+
                 print(
+
                     f"Processed: {total:,} | "
                     f"Kept: {kept:,} | "
-                    f"Removed: {removed:,}"
+                    f"Removed: {removed:,} | "
+                    f"Main: {kept_by_namespace['0']:,} | "
+                    f"Page: {kept_by_namespace['104']:,}"
                 )
 
-    print("\nFinished!")
-    print(f"Total articles : {total:,}")
-    print(f"Kept           : {kept:,}")
-    print(f"Removed        : {removed:,}")
 
+    # ========================================================
+    # FINAL STATISTICS
+    # ========================================================
+
+    print("\n" + "=" * 65)
+    print("WIKISOURCE CLEANING COMPLETE")
+    print("=" * 65)
+
+
+    print(f"\nTotal documents : {total:,}")
+    print(f"Kept            : {kept:,}")
+    print(f"Removed         : {removed:,}")
+
+
+    # --------------------------------------------------------
+    # REMOVAL REASONS
+    # --------------------------------------------------------
+
+    print("\nRemoval reasons:")
+
+    for reason, count in (
+        removal_reasons.most_common()
+    ):
+
+        percentage = (
+            count / total * 100
+            if total > 0
+            else 0
+        )
+
+        print(
+
+            f"{reason:30} "
+            f"{count:10,} "
+            f"({percentage:.2f}%)"
+        )
+
+
+    # --------------------------------------------------------
+    # TOTAL BY NAMESPACE
+    # --------------------------------------------------------
+
+    print("\nTotal by namespace:")
+
+    for namespace, count in (
+        total_by_namespace.most_common()
+    ):
+
+        print(
+
+            f"Namespace {namespace:>7}: "
+            f"{count:,}"
+        )
+
+
+    # --------------------------------------------------------
+    # KEPT BY NAMESPACE
+    # --------------------------------------------------------
+
+    print("\nKept by namespace:")
+
+    for namespace, count in (
+        kept_by_namespace.most_common()
+    ):
+
+        total_ns = total_by_namespace[
+            namespace
+        ]
+
+        percentage = (
+            count / total_ns * 100
+            if total_ns > 0
+            else 0
+        )
+
+        print(
+
+            f"Namespace {namespace:>7}: "
+            f"{count:10,} "
+            f"({percentage:.2f}%)"
+        )
+
+
+    # --------------------------------------------------------
+    # REMOVED BY NAMESPACE
+    # --------------------------------------------------------
+
+    print("\nRemoved by namespace:")
+
+    for namespace, count in (
+        removed_by_namespace.most_common()
+    ):
+
+        total_ns = total_by_namespace[
+            namespace
+        ]
+
+        percentage = (
+            count / total_ns * 100
+            if total_ns > 0
+            else 0
+        )
+
+        print(
+
+            f"Namespace {namespace:>7}: "
+            f"{count:10,} "
+            f"({percentage:.2f}%)"
+        )
+
+
+    # --------------------------------------------------------
+    # CHARACTER STATISTICS
+    # --------------------------------------------------------
+
+    print("\nCharacter statistics:")
+
+    print(
+        f"Input characters : "
+        f"{input_chars:,}"
+    )
+
+    print(
+        f"Output characters: "
+        f"{output_chars:,}"
+    )
+
+    print(
+        f"Characters removed: "
+        f"{input_chars - output_chars:,}"
+    )
+
+
+    # --------------------------------------------------------
+    # FINAL OUTPUT
+    # --------------------------------------------------------
+
+    print(
+        f"\nOutput saved to: "
+        f"{OUTPUT_FILE}"
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 if __name__ == "__main__":
+
     process_file()

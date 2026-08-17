@@ -4,9 +4,9 @@ import unicodedata
 from collections import Counter
 
 
-INPUT_FILE = "sangraha_verified_tel_sample.jsonl"
-OUTPUT_FILE = "sangraha_verified_tel_sample_basic_filtered.jsonl"
-STATS_FILE = "sangraha_basic_filter_stats.json"
+INPUT_FILE = "telugu_wikisource_clean.jsonl"
+OUTPUT_FILE = "telugu_wikisource_basic_filtered.jsonl"
+STATS_FILE = "telugu_wikisource_basic_filter_stats.json"
 
 # ============================================================
 # CONFIGURATION

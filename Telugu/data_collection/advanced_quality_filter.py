@@ -7,11 +7,11 @@ from collections import Counter
 # ============================================================
 # CONFIGURATION
 # ============================================================
-INPUT_FILE = "sangraha_verified_tel_sample_exact_dedup.jsonl"
+INPUT_FILE = "telugu_wikisource_near_dedup.jsonl"
 
-OUTPUT_FILE = "sangraha_verified_tel_sample_quality_filtered.jsonl"
+OUTPUT_FILE = "telugu_wikisource_quality_filtered.jsonl"
 
-STATS_FILE = "sangraha_advanced_quality_filter_stats.json"
+STATS_FILE = "telugu_wikisource_advanced_quality_filter_stats.json"
 
 
 # ------------------------------------------------------------
