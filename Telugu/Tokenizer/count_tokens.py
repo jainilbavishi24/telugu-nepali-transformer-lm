@@ -11,8 +11,8 @@ import sentencepiece as spm
 INPUT_FILE = "telugu_combined_corpus_v4.jsonl"
 
 MODEL_FILE = (
-    "Telugu/telugu_sentencepiece_bpe_8k/"
-    "telugu_bpe_8k.model"
+    "Telugu/telugu_sentencepiece_bpe_24k/"
+    "telugu_bpe_24k.model"
 )
 
 OUTPUT_FILE = "token_count_stats.json"

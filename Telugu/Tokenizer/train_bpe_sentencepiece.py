@@ -6,13 +6,13 @@ from pathlib import Path
 # CONFIGURATION
 # ============================================================
 
-INPUT_FILE = "telugu_tokenizer_corpus.txt"
+INPUT_FILE = "telugu_tokenizer_corpus_v2.txt"
 
-OUTPUT_DIR = Path("telugu_sentencepiece_bpe_8k")
+OUTPUT_DIR = Path("telugu_sentencepiece_bpe_24k")
 
-VOCAB_SIZE = 8000
+VOCAB_SIZE = 24_000
 
-MODEL_PREFIX = OUTPUT_DIR / "telugu_bpe_8k"
+MODEL_PREFIX = OUTPUT_DIR / "telugu_bpe_24k"
 
 
 # ============================================================
