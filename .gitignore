@@ -2,4 +2,5 @@ DS_Store
 *.json
 *.jsonl
 __pycache__/
-*.txt
+telugu_tokenizer_corpus.txt
+telugu_tokenizer_corpus_v2.txt
