@@ -1,3 +1,5 @@
+DS_Store
 *.json
 *.jsonl
 __pycache__/
+*.txt
