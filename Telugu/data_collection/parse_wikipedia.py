@@ -5,11 +5,10 @@ from collections import Counter
 
 
 DUMP_FILE = (
-    "/Users/rithvik/Downloads/"
-    "tewikisource-latest-pages-articles.xml.bz2"
+    "/Users/rithvik/Downloads/tewiktionary-latest-pages-articles.xml.bz2"
 )
 
-OUTPUT_FILE = "telugu_wikisource_raw.jsonl"
+OUTPUT_FILE = "telugu_wikitionary_raw.jsonl"
 
 
 def parse_wikisource():

@@ -8,14 +8,14 @@ from datasketch import MinHash, MinHashLSH
 # CONFIGURATION
 # ============================================================
 
-INPUT_FILE = "telugu_wikisource_exact_dedup.jsonl"
+INPUT_FILE = "telugu_wikitionary_exact_dedup.jsonl"
 
-OUTPUT_FILE = "telugu_wikisource_near_dedup.jsonl"
+OUTPUT_FILE = "telugu_wikitionary_near_dedup.jsonl"
 
-STATS_FILE = "wikisource_near_dedup_stats.json"
+STATS_FILE = "wikitionary_near_dedup_stats.json"
 
 # New audit file
-AUDIT_FILE = "wikisource_near_duplicate_pairs.jsonl"
+AUDIT_FILE = "wikitionary_near_duplicate_pairs.jsonl"
 
 
 # MinHash configuration

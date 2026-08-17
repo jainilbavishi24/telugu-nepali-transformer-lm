@@ -7,11 +7,11 @@ from collections import Counter
 # CONFIGURATION
 # ============================================================
 
-INPUT_FILE = "telugu_wikisource_raw.jsonl"
+INPUT_FILE = "telugu_wikitionary_raw.jsonl"
 
-OUTPUT_FILE = "telugu_wikisource_clean.jsonl"
+OUTPUT_FILE = "telugu_wikitionary_clean.jsonl"
 
-MIN_CHARS = 100
+MIN_CHARS = 20
 
 
 # ============================================================
@@ -519,7 +519,7 @@ def process_file():
                     else namespace
                 ),
 
-                "source": "telugu_wikisource"
+                "source": "telugu_wikitionary"
             }
 
 
