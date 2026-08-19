@@ -10,7 +10,7 @@ DATASET_NAME = "ai4bharat/sangraha"
 DATA_DIR = "verified/tel"
 
 # New output file
-OUTPUT_FILE = "sangraha_verified_tel_500k.jsonl"
+OUTPUT_FILE = "sangraha_verified_tel_300k.jsonl"
 
 
 # ============================================================
@@ -18,10 +18,10 @@ OUTPUT_FILE = "sangraha_verified_tel_500k.jsonl"
 # ============================================================
 
 # Number of valid documents already collected previously
-SKIP_DOCUMENTS = 100_000
+SKIP_DOCUMENTS = 600_000
 
 # Number of NEW documents to collect
-NUM_DOCUMENTS = 500_000
+NUM_DOCUMENTS = 300_000
 
 
 # ============================================================
