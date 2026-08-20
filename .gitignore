@@ -1,7 +1,8 @@
+.vscode/
 .DS_Store
-*.json
 *.jsonl
-__pycache__/
-telugu_tokenizer_corpus.txt
-telugu_tokenizer_corpus_v2.txt
+*.json
 *.txt
+Telugu/data
+Nepalese/data
+__pycache__/
