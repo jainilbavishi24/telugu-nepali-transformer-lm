@@ -33,7 +33,7 @@ class Pipeline:
 
 if __name__ == "__main__":
     input_file = "Nepalese/data.nosync/nepalese_combined_corpus.jsonl"
-    output_file = "Nepalese/data.nosync/nepalese_combined_corpus_cleaned.jsonl"
+    output_file = "Nepalese/data.nosync/nepalese_combined_corpus_cleaned_v2.jsonl"
 
     basic_filter_output = "Nepalese/data.nosync/nepalese_basic_filtered.jsonl"
     exact_dedup_output = "Nepalese/data.nosync/nepalese_exact_dedup.jsonl"
