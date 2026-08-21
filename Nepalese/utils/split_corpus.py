@@ -7,11 +7,11 @@ from collections import Counter
 # CONFIGURATION
 # ============================================================
 
-INPUT_FILE = "Telugu/data/telugu_combined_corpus_clean.jsonl"
+INPUT_FILE = "Nepalese/data.nosync/nepalese_combined_corpus_cleaned_v2.jsonl"
 
-TRAIN_FILE = "Telugu/data/telugu_train.jsonl"
-VALID_FILE = "Telugu/data/telugu_validation.jsonl"
-TEST_FILE = "Telugu/data/telugu_test.jsonl"
+TRAIN_FILE = "Nepalese/data.nosync/nepalese_train.jsonl"
+VALID_FILE = "Nepalese/data.nosync/nepalese_validation.jsonl"
+TEST_FILE = "Nepalese/data.nosync/nepalese_test.jsonl"
 
 STATS_FILE = "corpus_split_stats.json"
 
@@ -29,7 +29,7 @@ TEST_RATIO = 0.01
 # RANDOM SEED
 # ============================================================
 
-SEED = "telugu_corpus_split_v1"
+SEED = "nepalese_corpus_split_v1"
 
 
 # ============================================================
@@ -95,7 +95,7 @@ def get_split_value(record, line_number):
 def split_corpus():
 
     print("=" * 65)
-    print("SPLITTING TELUGU CORPUS")
+    print("SPLITTING NEPALESE CORPUS")
     print("=" * 65)
 
     print(f"\nInput file : {INPUT_FILE}")

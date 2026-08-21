@@ -6,12 +6,12 @@ import sentencepiece as spm
 # CONFIGURATION
 # ============================================================
 
-TRAIN_FILE = "Telugu/data/telugu_train.jsonl"
-TEXT_FILE = "Telugu/data/telugu_train_text.txt"
+TRAIN_FILE = "Nepalese/data.nosync/nepalese_train.jsonl"
+TEXT_FILE = "Nepalese/data.nosync/nepalese_train_text.txt"
 
-MODEL_PREFIX = "Telugu/models/telugu_sentencepiece_bpe_24k/telugu_bpe_24k"
+MODEL_PREFIX = "Nepalese/Tokenizer/models/nepalese_sentencepiece_bpe_6k/nepalese_bpe_6k"
 
-VOCAB_SIZE = 8_000
+VOCAB_SIZE = 6_000
 
 
 # ============================================================
