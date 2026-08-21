@@ -62,29 +62,29 @@ from tqdm import tqdm
 # ============================================================
 # CONFIGURATION
 # ============================================================
-DOMAIN = "ratopati.com"
+DOMAIN = "gorkhapatraonline.com"
 
 SEEDS = [
-    "https://www.ratopati.com/",
+    "https://www.gorkhapatraonline.com/",
 ]
 
-OUTPUT_FILE = "Nepalese/data.nosync/onlinekhabar.jsonl"
+OUTPUT_FILE = "Nepalese/data.nosync/gorkhapatra.jsonl"
 
 # ------------------------------------------------------------
 # NETWORKING
 # ------------------------------------------------------------
 
 # Number of concurrent HTTP download workers.
-DOWNLOAD_WORKERS = 16
+DOWNLOAD_WORKERS = 32
 
 # Maximum simultaneous connections to this domain.
-MAX_CONNECTIONS = 16
+MAX_CONNECTIONS = 32
 
 # Minimum delay between requests to this domain.
 #
 # Start conservatively. Increase throughput only after verifying
 # the site handles the crawl appropriately.
-REQUEST_DELAY = 0.20
+REQUEST_DELAY = 0.10
 
 REQUEST_TIMEOUT = 30
 
@@ -112,11 +112,11 @@ EXTRACTION_QUEUE_SIZE = 100
 # Crawl
 # ------------------------------------------------------------
 
-MAX_PAGES = 100_000
+MAX_PAGES = 40_000
 
 MIN_CHARS = 300
 
-MIN_DEVANAGARI_RATIO = 0.35
+MIN_DEVANAGARI_RATIO = 0.50
 
 # If True, crawl same-domain links discovered from pages.
 FALLBACK_LINK_CRAWL = True

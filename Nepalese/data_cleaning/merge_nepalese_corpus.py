@@ -7,12 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data.nosync"
 
-INPUT_FILES = [
-    {"name": "ekantipur", "path": DATA_DIR / "ekantipur.jsonl"},
-    {"name": "nepalese_cc", "path": DATA_DIR / "nepalese_cc_corpus.jsonl"},
-    {"name": "nepalese_wikipedia", "path": DATA_DIR / "nepalese_wikipedia_clean.jsonl"},
-    {"name": "onlinekhabar", "path": DATA_DIR / "onlinekhabar.jsonl"},
-    {"name": "ratopati", "path": DATA_DIR / "ratopati.jsonl"},
+APPEND_SOURCE_FILES = [
+    {"name": "gorkhapatra", "path": DATA_DIR / "gorkhapatra.jsonl"},
+    {"name": "sangraha", "path": DATA_DIR / "nepalese_sangraha_raw.jsonl"},
 ]
 
 OUTPUT_FILE = DATA_DIR / "nepalese_combined_corpus.jsonl"
@@ -30,6 +27,8 @@ def normalize_source(corpus_name, record):
         "nepalese_wikipedia": "nepalese_wikipedia",
         "onlinekhabar": "onlinekhabar.com",
         "ratopati": "ratopati.com",
+        "gorkhapatra": "gorkhapatraonline.com",
+        "sangraha": "ai4bharat_sangraha_verified_tel",
     }
 
     return fallback.get(corpus_name, corpus_name)
@@ -67,15 +66,26 @@ def normalize_record(corpus_name, line_number, record):
     return merged
 
 
-def merge_files():
+def append_new_sources():
     stats = Counter()
+    existing_ids = set()
 
-    with OUTPUT_FILE.open("w", encoding="utf-8") as outfile:
-        for config in INPUT_FILES:
+    if OUTPUT_FILE.exists():
+        with OUTPUT_FILE.open("r", encoding="utf-8") as existing_file:
+            for line in existing_file:
+                if not line.strip():
+                    continue
+                try:
+                    existing_ids.add(json.loads(line).get("id"))
+                except json.JSONDecodeError:
+                    continue
+
+    with OUTPUT_FILE.open("a", encoding="utf-8") as outfile:
+        for config in APPEND_SOURCE_FILES:
             corpus_name = config["name"]
             input_path = config["path"]
 
-            print(f"\nProcessing {corpus_name}: {input_path.name}")
+            print(f"\nAppending {corpus_name}: {input_path.name}")
             stats[f"{corpus_name}_files_seen"] += 1
 
             with input_path.open("r", encoding="utf-8") as infile:
@@ -97,18 +107,30 @@ def merge_files():
                         stats[f"{corpus_name}_empty_text"] += 1
                         continue
 
+                    if normalized["id"] in existing_ids:
+                        stats[f"{corpus_name}_duplicates_skipped"] += 1
+                        continue
+
                     outfile.write(json.dumps(normalized, ensure_ascii=False) + "\n")
+                    existing_ids.add(normalized["id"])
                     stats[f"{corpus_name}_kept"] += 1
                     stats["total_kept"] += 1
 
     stats["output_file"] = str(OUTPUT_FILE)
     STATS_FILE.write_text(json.dumps(dict(stats), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    print("\nMerge complete.")
+    print("\nAppend complete.")
     print(f"Output: {OUTPUT_FILE}")
     print(f"Stats: {STATS_FILE}")
-    print(f"Total kept records: {stats['total_kept']}")
+
+    for config in APPEND_SOURCE_FILES:
+        corpus_name = config["name"]
+        added = stats.get(f"{corpus_name}_kept", 0)
+        skipped = stats.get(f"{corpus_name}_duplicates_skipped", 0)
+        print(f"{corpus_name}: appended={added}, skipped={skipped}")
+
+    print(f"New rows added in this run: {stats['total_kept']} (not total corpus size)")
 
 
 if __name__ == "__main__":
-    merge_files()
+    append_new_sources()
