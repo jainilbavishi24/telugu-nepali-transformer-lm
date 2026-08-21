@@ -62,10 +62,10 @@ from tqdm import tqdm
 # ============================================================
 # CONFIGURATION
 # ============================================================
-DOMAIN = "onlinekhabar.com"
+DOMAIN = "ratopati.com"
 
 SEEDS = [
-    "https://www.onlinekhabar.com/",
+    "https://www.ratopati.com/",
 ]
 
 OUTPUT_FILE = "Nepalese/data.nosync/onlinekhabar.jsonl"
@@ -141,7 +141,7 @@ DEBUG_LINK_LIMIT = 20
 
 USER_AGENT = (
     "NepaliCorpusResearchBot/1.0 "
-    "(academic language-resource collection; contact: YOUR_EMAIL)"
+    "(academic language-resource collection; contact: sairithvik.achutuni@students.iiit.ac.in)"
 )
 
 ACCEPT_LANGUAGE = "ne-NP,ne;q=0.9,en;q=0.5"
@@ -939,7 +939,15 @@ def extract_and_process(
                     or ""
                 )
 
-                date = metadata.date
+                # Coerce to str defensively -- trafilatura normally
+                # returns a date string, but an unexpected type here
+                # (e.g. a datetime object on some parse paths) would
+                # otherwise crash json.dumps at write time.
+                date = (
+                    str(metadata.date)
+                    if metadata.date
+                    else None
+                )
 
                 author = (
                     metadata.author
@@ -1370,6 +1378,17 @@ class ConcurrentCrawler:
 
     async def run(self):
 
+        # Load state from any prior run of this crawl so we don't
+        # re-fetch or re-save articles already collected. seen_urls
+        # is seeded (not just seen_hashes) so already-visited pages
+        # are skipped at the download stage too, not just deduped
+        # after the fact -- saves bandwidth and time on resume.
+        existing_hashes, existing_urls = load_existing_corpus_state(
+            OUTPUT_FILE
+        )
+        self.seen_hashes |= existing_hashes
+        self.seen_urls |= existing_urls
+
         self.writer = JSONLWriter(
             OUTPUT_FILE
         )
@@ -1575,25 +1594,14 @@ class ConcurrentCrawler:
                         self.active_extractions == 0
                     )
 
-                    reached_limit = (
-                        self.stats[
-                            "queued"
-                        ] >= MAX_PAGES
-                    )
-
+                    # Stop once both queues are empty and no worker
+                    # is mid-task. This covers both the "crawl fully
+                    # exhausted" case and the "MAX_PAGES reached,
+                    # remaining work drained" case -- MAX_PAGES simply
+                    # stops new enqueues (in enqueue()), so once that
+                    # happens the queues naturally empty out and this
+                    # same condition fires.
                     if (
-                        queues_empty
-                        and
-                        workers_idle
-                    ):
-                        break
-
-                    # If MAX_PAGES has been reached, no new URLs
-                    # will be enqueued. Wait for the current work
-                    # to drain, then stop.
-                    if (
-                        reached_limit
-                        and
                         queues_empty
                         and
                         workers_idle
@@ -1677,6 +1685,51 @@ class JSONLWriter:
     def close(self):
 
         self.file.close()
+
+
+def load_existing_corpus_state(path: str):
+    """
+    On startup, read any previously-saved JSONL output and return
+    the set of content hashes and URLs already collected, so a
+    restarted crawl doesn't re-fetch or re-save the same articles.
+
+    Without this, JSONLWriter's append-mode file plus fresh in-memory
+    seen_urls/seen_hashes sets on every run means every restart
+    re-crawls from the seeds and appends duplicate records.
+    """
+
+    existing_hashes = set()
+    existing_urls = set()
+
+    file_path = Path(path)
+
+    if not file_path.exists():
+        return existing_hashes, existing_urls
+
+    with file_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                # Tolerate a truncated last line from a prior
+                # crash mid-write; skip rather than fail startup.
+                continue
+
+            if "id" in record:
+                existing_hashes.add(record["id"])
+            if "url" in record:
+                existing_urls.add(normalize_url(record["url"]))
+
+    logger.info(
+        "Resuming from existing corpus: %d articles, %d URLs already collected",
+        len(existing_hashes),
+        len(existing_urls),
+    )
+
+    return existing_hashes, existing_urls
 
 
 # ============================================================
