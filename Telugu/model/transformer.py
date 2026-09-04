@@ -68,6 +68,7 @@ class TransformerBlock(nn.Module):
         num_heads: int,
         ff_hidden_dim: int | None = None,
         dropout: float = 0.0,
+        attn_dropout: float = 0.0,
         rope_base: float = 10_000.0,
         max_seq_len: int = 512,
     ):
@@ -90,10 +91,16 @@ class TransformerBlock(nn.Module):
             base=rope_base,
         )
 
+        # attn_dropout applies to the attention *probabilities* (after softmax,
+        # before the value matmul), which is a different regularizer from the
+        # sublayer-output dropout below. 0.0 leaves it off entirely: the module
+        # skips the Dropout call rather than running an identity op on the
+        # (B, H, T, T) tensor.
         self.attn = MultiHeadAttention(
             input_dim=embed_dim,
             embed_dim=embed_dim,
             num_heads=num_heads,
+            dropout=attn_dropout if attn_dropout and attn_dropout > 0 else None,
             rope=self.rope,
         )
 
@@ -169,6 +176,7 @@ class LanguageModel(nn.Module):
         num_heads: int = 8,
         ff_hidden_dim: int | None = None,
         dropout: float = 0.0,
+        attn_dropout: float = 0.0,
         rope_base: float = 10_000.0,
         pad_token_id: int | None = None,
         tie_embeddings: bool = True,
@@ -206,6 +214,7 @@ class LanguageModel(nn.Module):
                     num_heads=num_heads,
                     ff_hidden_dim=ff_hidden_dim,
                     dropout=dropout,
+                    attn_dropout=attn_dropout,
                     rope_base=rope_base,
                     max_seq_len=max_seq_len,
                 )

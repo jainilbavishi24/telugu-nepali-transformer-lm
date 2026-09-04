@@ -1,33 +1,104 @@
+# Telugu (Model H) — Phase 2 pretraining config.
+#
+# Parameter budget. The brief targets ~25M trainable parameters. With
+# vocab_size 8000 the numbers below land on exactly 25,117,696:
+#
+#   token embedding (tied with the LM head)   8000 x 512      =  4,096,000
+#   per block   4d^2  (qkv proj + out proj)   4 x 512^2       =  1,048,576
+#               2dF   (ffn fc1 + fc2)         2 x 512 x 1536  =  1,572,864
+#               biases + 2 LayerNorms         9d + F          =      6,144
+#                                             per block       =  2,627,584
+#   x 8 blocks                                                = 21,020,672
+#   final LayerNorm                           2d              =      1,024
+#                                             TOTAL           = 25,117,696
+#
+# Shape reasoning: embed_dim / num_heads = 64, so every attention matmul has a
+# tensor-core-friendly contraction dim; embed_dim / num_layers = 64 is the
+# usual aspect ratio at this scale (GPT-2 small is 768/12). The FFN is 3x
+# embed_dim rather than the more common 4x — that is what buys 8 blocks
+# instead of 7 inside the same parameter budget, and depth buys more than FFN
+# width at 25M params.
+
 model:
-  vocab_size: 8000
-  max_seq_len: 512
-  embed_dim: 320        # pick dims to land near ~25M params; check with:
-  num_layers: 8          #   sum(p.numel() for p in model.parameters())
-  num_heads: 8
-  ff_hidden_dim: null     # defaults to 4 * embed_dim if omitted
-  dropout: 0.1
+  vocab_size: 8000          # from tokenizer/models/telugu_sentencepiece_bpe_8k
+  max_seq_len: 512          # RoPE is relative, so this is the window we *train*
+                            # on, not a hard architectural ceiling
+  embed_dim: 512
+  num_layers: 8
+  num_heads: 8              # head_dim = 64
+  ff_hidden_dim: 1536       # 3 x embed_dim (null falls back to the 4x default)
+  dropout: 0.1              # embeddings, attention sublayer output, inside FFN
+  attn_dropout: 0.0         # dropout on the attention *probabilities*; set to
+                            # 0.1 to enable — costs memory on the (B,H,T,T) tensor
   rope_base: 10000.0
-  tie_embeddings: true
+  tie_embeddings: true      # saves 4,096,000 params, ~16% of the model
+  pad_token_id: null        # the packed corpus is one flat token stream with no
+                            # padding, so nothing should be dropped from the
+                            # loss. Do NOT set this to 0 — id 0 is SentencePiece
+                            # <unk>, which the model does need to learn.
 
 training:
-  batch_size: 16
-  num_workers: 2
-  learning_rate: 3.0e-4
-  weight_decay: 0.1
-  warmup_steps: 1000
-  max_steps: 62000        # tune to your ~500M-token budget and compute
-  min_lr_ratio: 0.1
+  # --- batch geometry -------------------------------------------------------
+  # batch_size is the *micro* batch: one forward pass through the GPU.
+  # global_batch_tokens is what the optimizer sees; train.py derives
+  #   grad_accum_steps = global_batch_tokens / (batch_size * max_seq_len)
+  # so batch_size can be tuned purely for memory without changing the
+  # optimization. Raising batch_size past 64 means raising
+  # global_batch_tokens by the same factor (run --benchmark first).
+  batch_size: 64                 # 64 x 512 = 32,768 tokens per forward
+  global_batch_tokens: 32768     # => grad_accum_steps = 1
+  num_workers: 4                 # unused by train.py (it indexes the .bin
+                                 # directly); kept for the eval scripts that
+                                 # go through lm_dataset.make_dataloader
+
+  # --- schedule ------------------------------------------------------------
+  # Budget in tokens rather than steps: max_steps is derived as
+  # ceil(train_tokens / global_batch_tokens), so the cosine decay always
+  # bottoms out exactly when the token budget runs out. 300M tokens at
+  # 32,768 tokens/step = 9,155 steps. Set max_steps to override.
+  train_tokens: 300000000
+  max_steps: null
+  learning_rate: 6.0e-4
+  warmup_steps: 300              # ~3% of the run, linear from ~0
+  min_lr_ratio: 0.1              # cosine floor = 6.0e-5
+  weight_decay: 0.1              # 2-D params only; biases/LayerNorm gains exempt
+  beta1: 0.9
+  beta2: 0.95
+  eps: 1.0e-8
   grad_clip: 1.0
-  eval_interval: 500
-  eval_iters: 50
-  save_interval: 500
+  seed: 42
+
+  # --- evaluation / checkpointing -------------------------------------------
+  eval_interval: 250
+  eval_iters: 24                 # 24 x 64 = 1,536 fixed val windows, reused at
+                                 # every eval so the curve is comparable
+                                 # point-to-point rather than re-sampled
+  save_interval: 500             # overwrite latest.pt — the resume insurance
+  snapshot_interval: 2000        # additionally keep a numbered step_N.pt
+  keep_snapshots: 3              # older numbered snapshots are pruned
   out_dir: "checkpoints/telugu"
+
 data:
+  # ---- packed token files (what training actually reads) -------------------
+  out_dir: "data_bins/telugu"    # looked at first; also the download cache
+  train_bin: "pretrain_train.bin"
+  val_bin: "pretrain_val.bin"
+  test_bin: "test_train.bin"     # held out for Phase 2 eval, not used here
+  # If a .bin is not already in out_dir, train.py pulls it from this Hub repo.
+  # Leave hf_bin_files empty to have it locate each file by name anywhere in
+  # the repo, or pin the exact in-repo paths, e.g.
+  #   hf_bin_files:
+  #     pretrain_train.bin: "data_bins/telugu/pretrain_train.bin"
+  hf_bin_repo_id: "iconically-mine/LMA-indivudal-project"
+  hf_bin_repo_type: "dataset"
+  hf_bin_files: {}
+
+  # ---- source corpus (used by tokenize_and_pack.py, not by train.py) ------
   repo_id: "iconically-mine/LMA-indivudal-project"
-  repo_type: "dataset"          # HF repo type: "dataset" (not "model")
+  repo_type: "dataset"
   train_file: "Nepalese/nepalese_data.nosync/telugu_train.jsonl"
   test_file: "Nepalese/nepalese_data.nosync/telugu_test.jsonl"
-  text_field_candidates:        # tried in order, first non-empty string wins
+  text_field_candidates:
     - "text"
     - "content"
     - "sentence"
@@ -36,7 +107,23 @@ data:
   val_fraction: 0.05
   seed: 42
   stride: 512
-  out_dir: "data_bins/telugu"   # where packed .bin/.meta files get written
 
 tokenizer:
   model_path: "Telugu/tokenizer/models/telugu_sentencepiece_bpe_8k/telugu_bpe_8k.model"
+
+# Everything below is about keeping the GPU busy; none of it changes the model.
+runtime:
+  precision: bf16            # bf16 | fp16 | fp32. L40S has native bf16 tensor
+                             # cores, and bf16 keeps fp32's exponent range, so
+                             # no GradScaler and no loss-scale tuning.
+  compile: true              # torch.compile — fuses the hand-written attention
+                             # chain (mask -> softmax -> dropout -> matmul).
+                             # Falls back to eager automatically if it fails.
+  compile_mode: default      # default | reduce-overhead | max-autotune
+  matmul_precision: high     # TF32 for whatever still runs in fp32
+  gpu_resident_data: auto    # auto | true | false — hold the whole token file
+                             # in VRAM as int16 (~2 bytes/token) so a step needs
+                             # no DataLoader and no host->device copy
+  gpu_peak_tflops: 181.05    # L40S dense bf16, used only for the MFU readout
+  log_interval: 10           # steps between CSV rows (and the one GPU sync)
+  print_interval: 100        # steps between stdout lines

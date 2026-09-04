@@ -69,6 +69,32 @@ class RotaryPositionalEmbedding(nn.Module):
         if length > self.cos_cached.size(0) or self.cos_cached.device != device:
             self._set_cache(length, device)
 
+    def _cos_sin_range(
+        self, offset: int, length: int, device: torch.device, dtype: torch.dtype
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Cosines/sines for the contiguous positions ``[offset, offset+length)``.
+
+        Numerically identical to ``_cos_sin(arange(offset, offset+length))``,
+        but driven entirely by Python ints, so it never reads a value back off
+        the accelerator. ``_cos_sin`` has to call ``.item()`` on
+        ``position_ids`` to validate them and size the cache, and each of those
+        calls blocks until the device catches up — three syncs per RoPE call,
+        once per layer, on every training step. It also stops ``torch.compile``
+        from capturing the block as a single graph.
+
+        Returns two tensors of shape ``(1, 1, length, rotary_dim)`` so they
+        broadcast over ``(batch, heads, length, head_dim)``.
+        """
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        if length <= 0:
+            raise ValueError("length must be positive")
+
+        self._ensure_cache(offset + length, device)
+        cos = self.cos_cached[offset : offset + length].to(dtype=dtype)
+        sin = self.sin_cached[offset : offset + length].to(dtype=dtype)
+        return cos[None, None], sin[None, None]
+
     def _cos_sin(
         self, position_ids: torch.Tensor, dtype: torch.dtype
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -104,7 +130,12 @@ class RotaryPositionalEmbedding(nn.Module):
 
         batch_size, _, sequence_length, _ = q.shape
         if position_ids is None:
-            position_ids = torch.arange(offset, offset + sequence_length, device=q.device).unsqueeze(0)
+            # Training always lands here: positions are just
+            # offset .. offset + T - 1, which the cache can be sliced for
+            # directly. Building an arange and pushing it through _cos_sin()
+            # would work, but it costs a device sync per layer per step for
+            # no benefit. Same numbers either way.
+            cos, sin = self._cos_sin_range(offset, sequence_length, q.device, q.dtype)
         else:
             position_ids = position_ids.to(device=q.device)
             if position_ids.ndim == 1:
@@ -113,8 +144,8 @@ class RotaryPositionalEmbedding(nn.Module):
                 raise ValueError("position_ids must have shape (sequence_length,) or (batch, sequence_length)")
             if position_ids.size(0) not in (1, batch_size):
                 raise ValueError("position_ids batch size must be 1 or match q and k")
+            cos, sin = self._cos_sin(position_ids, q.dtype)
 
-        cos, sin = self._cos_sin(position_ids, q.dtype)
         return (
             apply_rotary_pos_emb(q, cos, sin, self.rotary_dim),
             apply_rotary_pos_emb(k, cos, sin, self.rotary_dim),
@@ -122,7 +153,6 @@ class RotaryPositionalEmbedding(nn.Module):
 
 
 __all__ = [
-    "SinusoidalPositionalEncoding",
     "RotaryPositionalEmbedding",
     "apply_rotary_pos_emb",
     "rotate_half",
