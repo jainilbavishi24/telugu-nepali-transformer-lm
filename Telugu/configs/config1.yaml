@@ -54,10 +54,14 @@ training:
   # --- schedule ------------------------------------------------------------
   # Budget in tokens rather than steps: max_steps is derived as
   # ceil(train_tokens / global_batch_tokens), so the cosine decay always
-  # bottoms out exactly when the token budget runs out. 300M tokens at
-  # 32,768 tokens/step = 9,155 steps. Set max_steps to override.
-  train_tokens: 300000000
-  max_steps: null
+  # bottoms out exactly when the token budget runs out.
+  #
+  # Corpus: 595,240,023 train tokens, 31,527,403 val tokens.
+  # At 32,768 tokens/step, one epoch = 18,173 steps. Running ~300M tokens
+  # (~0.5 epoch) takes ~1 hour; a full epoch is ~2 hours. The 1-2 hour
+  # budget from the brief fits a single epoch comfortably.
+  train_tokens: 595240023     # one full pass over the corpus
+  max_steps: null             # derived = ceil(595M / 32768) = 18,173
   learning_rate: 6.0e-4
   warmup_steps: 300              # ~3% of the run, linear from ~0
   min_lr_ratio: 0.1              # cosine floor = 6.0e-5
