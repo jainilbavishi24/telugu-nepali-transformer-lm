@@ -15,7 +15,7 @@ training:
   learning_rate: 3.0e-4
   weight_decay: 0.1
   warmup_steps: 1000
-  max_steps: 50000        # tune to your ~500M-token budget and compute
+  max_steps: 62000        # tune to your ~500M-token budget and compute
   min_lr_ratio: 0.1
   grad_clip: 1.0
   eval_interval: 500

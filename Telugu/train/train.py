@@ -17,6 +17,18 @@ Resumes automatically if a checkpoint already exists in training.out_dir —
 delete that directory (or pass --no-resume) to start fresh.
 """
 
+import sys
+import os
+
+# Get the directory of the current script (train.py)
+current_script_dir = os.path.dirname(os.path.abspath(__file__))
+# The project root is one level up from the 'train' directory
+project_root = os.path.abspath(os.path.join(current_script_dir, '..'))
+
+# Add the project root to sys.path if it's not already there
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import argparse
 import csv
 import math
@@ -27,10 +39,8 @@ import torch
 import torch.nn as nn
 import yaml
 
-# --- Adjust this import to point at wherever your LanguageModel class lives ---
-from model.transformer import LanguageModel
-# -------------------------------------------------------------------------
 
+from model.transformer import LanguageModel
 from lm_dataset import make_dataloader
 
 
@@ -253,7 +263,7 @@ def main(config_path: str, resume: bool = True):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the from-scratch decoder-only LM")
-    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--config", default="Telugu/configs/config1.yaml")
     parser.add_argument("--no-resume", action="store_true", help="Ignore any existing checkpoint and start fresh")
     args = parser.parse_args()
     main(args.config, resume=not args.no_resume)
