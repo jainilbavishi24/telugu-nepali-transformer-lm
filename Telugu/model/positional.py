@@ -11,7 +11,7 @@ def rotate_half(x: torch.Tensor) -> torch.Tensor:
         raise ValueError("The last dimension of the input tensor must be even.")
 
     x = x.reshape(*x.shape[:-1], -1, 2)
-    return torch.stack(-x[..., 1], x[..., 0], dim=-1).flatten(-2)
+    return torch.stack((-x[..., 1], x[..., 0]), dim=-1).flatten(-2)
 
 def apply_rotary_pos_emb(
     x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, rotary_dim: Optional[int] = None

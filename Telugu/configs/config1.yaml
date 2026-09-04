@@ -1,21 +1,42 @@
 model:
   vocab_size: 8000
   max_seq_len: 512
+  embed_dim: 320        # pick dims to land near ~25M params; check with:
+  num_layers: 8          #   sum(p.numel() for p in model.parameters())
+  num_heads: 8
+  ff_hidden_dim: null     # defaults to 4 * embed_dim if omitted
+  dropout: 0.1
+  rope_base: 10000.0
+  tie_embeddings: true
 
 training:
   batch_size: 16
   num_workers: 2
-
+  learning_rate: 3.0e-4
+  weight_decay: 0.1
+  warmup_steps: 1000
+  max_steps: 50000        # tune to your ~500M-token budget and compute
+  min_lr_ratio: 0.1
+  grad_clip: 1.0
+  eval_interval: 500
+  eval_iters: 50
+  save_interval: 500
+  out_dir: "checkpoints/telugu"
 data:
-  repo_id: "iconically-mine/LMA-indivudual-project"
-
-  train_file: "Nepalses/nepalese/data.nosync/telugu_train.jsonl"
-  val_file: "Nepalses/nepalese/data.nosync/telugu_val.jsonl"
-  test_file: "Nepalses/nepalese/data.nosync/telugu_test.jsonl"
-
-  text_column: "text"
-
+  repo_id: "iconically-mine/LMA-indivudal-project"
+  repo_type: "dataset"          # HF repo type: "dataset" (not "model")
+  train_file: "Nepalese/nepalese_data.nosync/telugu_train.jsonl"
+  test_file: "Nepalese/nepalese_data.nosync/telugu_test.jsonl"
+  text_field_candidates:        # tried in order, first non-empty string wins
+    - "text"
+    - "content"
+    - "sentence"
+    - "raw_text"
+    - "body"
+  val_fraction: 0.05
+  seed: 42
   stride: 512
+  out_dir: "data_bins/telugu"   # where packed .bin/.meta files get written
 
 tokenizer:
-  model_path: "Telugu/tokenizer/telugu_bpe_sentencepiece_8k/telugu_bpe_sentencepiece_8k.model"
+  model_path: "Telugu/tokenizer/models/telugu_sentencepiece_bpe_8k/telugu_bpe_8k.model"
