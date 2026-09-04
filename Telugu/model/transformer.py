@@ -149,7 +149,7 @@ class TransformerBlock(nn.Module):
         return x
 
 
-class GPTLanguageModel(nn.Module):
+class LanguageModel(nn.Module):
     """
     Decoder-only GPT-style language model.
 

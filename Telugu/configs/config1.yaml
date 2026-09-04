@@ -1,0 +1,21 @@
+model:
+  vocab_size: 8000
+  max_seq_len: 512
+
+training:
+  batch_size: 16
+  num_workers: 2
+
+data:
+  repo_id: "iconically-mine/LMA-indivudual-project"
+
+  train_file: "Nepalses/nepalese/data.nosync/telugu_train.jsonl"
+  val_file: "Nepalses/nepalese/data.nosync/telugu_val.jsonl"
+  test_file: "Nepalses/nepalese/data.nosync/telugu_test.jsonl"
+
+  text_column: "text"
+
+  stride: 512
+
+tokenizer:
+  model_path: "Telugu/tokenizer/telugu_bpe_sentencepiece_8k/telugu_bpe_sentencepiece_8k.model"
