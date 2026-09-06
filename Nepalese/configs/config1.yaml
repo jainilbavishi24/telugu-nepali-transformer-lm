@@ -20,22 +20,18 @@
 # width at 25M params.
 
 model:
-  vocab_size: 8000          # from tokenizer/models/telugu_sentencepiece_bpe_8k
-  max_seq_len: 512          # RoPE is relative, so this is the window we *train*
-                            # on, not a hard architectural ceiling
+  vocab_size: 6000          
+  max_seq_len: 512          
   embed_dim: 512
   num_layers: 8
-  num_heads: 8              # head_dim = 64
-  ff_hidden_dim: 1536       # 3 x embed_dim (null falls back to the 4x default)
-  dropout: 0.1              # embeddings, attention sublayer output, inside FFN
-  attn_dropout: 0.0         # dropout on the attention *probabilities*; set to
-                            # 0.1 to enable — costs memory on the (B,H,T,T) tensor
+  num_heads: 8              
+  ff_hidden_dim: 1536       
+  dropout: 0.1             
+  attn_dropout: 0.0        
+                            
   rope_base: 10000.0
-  tie_embeddings: true      # saves 4,096,000 params, ~16% of the model
-  pad_token_id: null        # the packed corpus is one flat token stream with no
-                            # padding, so nothing should be dropped from the
-                            # loss. Do NOT set this to 0 — id 0 is SentencePiece
-                            # <unk>, which the model does need to learn.
+  tie_embeddings: true      
+  pad_token_id: null        
 
 training:
   # --- batch geometry -------------------------------------------------------
@@ -59,14 +55,13 @@ training:
   # ceil(train_tokens / global_batch_tokens), so the cosine decay always
   # bottoms out exactly when the token budget runs out.
   #
-  # Corpus, as counted from the packed .bin files themselves:
-  #   pretrain_train.bin  403,668,004 tokens
-  #   pretrain_val.bin     21,440,288 tokens
-  # At 32,768 tokens/step one epoch is ceil(403,668,004 / 32,768) = 12,319
-  # steps. On 2x T4 that is roughly 1.5 hours, which fits the brief's budget;
-  # halve train_tokens for a ~45 minute half-epoch run.
-  train_tokens: 403668004     # one full pass over the corpus
-  max_steps: null             # derived = ceil(403.7M / 32768) = 12,319
+  # Corpus:
+  #   pretrain_train.bin  480,690,693 tokens
+  #   pretrain_val.bin     25,577,877 tokens
+  # At 32,768 tokens/step one epoch is ceil(480,690,693 / 32,768) = 14,670
+  # steps. On 2x T4 that is roughly 1.8 hours, which fits the brief's budget.
+  train_tokens: 480690693     # one full pass over the corpus
+  max_steps: null             # derived = ceil(480.7M / 32768) = 14,670
   learning_rate: 6.0e-4
   warmup_steps: 300              # ~3% of the run, linear from ~0
   min_lr_ratio: 0.1              # cosine floor = 6.0e-5

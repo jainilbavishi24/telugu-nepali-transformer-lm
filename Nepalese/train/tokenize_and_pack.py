@@ -215,6 +215,6 @@ def main(config_path: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tokenize and pack HF-hosted JSONL corpus into .bin files")
-    parser.add_argument("--config", default="Telugu/configs/config1.yaml", help="Path to config.yaml")
+    parser.add_argument("--config", default="Nepalese/configs/config1.yaml", help="Path to config.yaml")
     args = parser.parse_args()
     main(args.config)
