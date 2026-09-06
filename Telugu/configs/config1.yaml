@@ -39,11 +39,14 @@ model:
 
 training:
   # --- batch geometry -------------------------------------------------------
-  # batch_size is the *micro* batch: one forward pass through the GPU.
-  # global_batch_tokens is what the optimizer sees; train.py derives
-  #   grad_accum_steps = global_batch_tokens / (batch_size * max_seq_len)
-  # so batch_size can be tuned purely for memory without changing the
-  # optimization. Raising batch_size past 64 means raising
+  # batch_size is the *micro* batch: one forward pass through one GPU.
+  # global_batch_tokens is what the optimizer sees, summed over every GPU;
+  # train.py derives
+  #   grad_accum_steps = global_batch_tokens / world_size / (batch_size * T)
+  # so adding a second GPU splits the same global batch instead of doubling it
+  # — the optimization is unchanged and only the wall clock moves. On 2 GPUs
+  # the 64-row micro batch is automatically reduced to 32 per GPU to keep the
+  # global batch at 32,768 tokens. Raising batch_size past 64 means raising
   # global_batch_tokens by the same factor (run --benchmark first).
   batch_size: 64                 # 64 x 512 = 32,768 tokens per forward
   global_batch_tokens: 32768     # => grad_accum_steps = 1
@@ -56,12 +59,14 @@ training:
   # ceil(train_tokens / global_batch_tokens), so the cosine decay always
   # bottoms out exactly when the token budget runs out.
   #
-  # Corpus: 595,240,023 train tokens, 31,527,403 val tokens.
-  # At 32,768 tokens/step, one epoch = 18,173 steps. Running ~300M tokens
-  # (~0.5 epoch) takes ~1 hour; a full epoch is ~2 hours. The 1-2 hour
-  # budget from the brief fits a single epoch comfortably.
-  train_tokens: 595240023     # one full pass over the corpus
-  max_steps: null             # derived = ceil(595M / 32768) = 18,173
+  # Corpus, as counted from the packed .bin files themselves:
+  #   pretrain_train.bin  403,668,004 tokens
+  #   pretrain_val.bin     21,440,288 tokens
+  # At 32,768 tokens/step one epoch is ceil(403,668,004 / 32,768) = 12,319
+  # steps. On 2x T4 that is roughly 1.5 hours, which fits the brief's budget;
+  # halve train_tokens for a ~45 minute half-epoch run.
+  train_tokens: 403668004     # one full pass over the corpus
+  max_steps: null             # derived = ceil(403.7M / 32768) = 12,319
   learning_rate: 6.0e-4
   warmup_steps: 300              # ~3% of the run, linear from ~0
   min_lr_ratio: 0.1              # cosine floor = 6.0e-5
@@ -117,17 +122,23 @@ tokenizer:
 
 # Everything below is about keeping the GPU busy; none of it changes the model.
 runtime:
-  precision: bf16            # bf16 | fp16 | fp32. L40S has native bf16 tensor
-                             # cores, and bf16 keeps fp32's exponent range, so
-                             # no GradScaler and no loss-scale tuning.
+  precision: bf16            # bf16 | fp16 | fp32. bf16 needs compute capability
+                             # 8.0+ (Ampere and later); on a T4 (sm_75) train.py
+                             # falls back to fp16 + GradScaler by itself, which
+                             # is the fast path there.
   compile: true              # torch.compile — fuses the hand-written attention
                              # chain (mask -> softmax -> dropout -> matmul).
-                             # Falls back to eager automatically if it fails.
+                             # Falls back to eager automatically if it fails
+                             # (e.g. Dynamo is unsupported on Python 3.12+ with
+                             # older torch builds).
   compile_mode: default      # default | reduce-overhead | max-autotune
   matmul_precision: high     # TF32 for whatever still runs in fp32
   gpu_resident_data: auto    # auto | true | false — hold the whole token file
                              # in VRAM as int16 (~2 bytes/token) so a step needs
                              # no DataLoader and no host->device copy
-  gpu_peak_tflops: 181.05    # L40S dense bf16, used only for the MFU readout
+  gpu_peak_tflops: 65.13     # per-GPU dense peak, used only for the MFU readout.
+                             # T4 fp16 = 65.13, V100 fp16 = 125,
+                             # L40S bf16 = 181.05, A100 bf16 = 312.
+                             # train.py multiplies this by the GPU count.
   log_interval: 10           # steps between CSV rows (and the one GPU sync)
   print_interval: 100        # steps between stdout lines

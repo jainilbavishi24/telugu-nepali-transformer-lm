@@ -1,7 +1,7 @@
-from basic_filter import BasicCorpusFilter
-from exact_dedup import ExactDeduplicator
-from quality_filter import AdvancedQualityFilter
-from near_dedup import NearDeduplicator
+from Nepalese.Tokenizer.data_cleaning.basic_filter import BasicCorpusFilter
+from Nepalese.Tokenizer.data_cleaning.exact_dedup import ExactDeduplicator
+from Nepalese.Tokenizer.data_cleaning.quality_filter import AdvancedQualityFilter
+from Nepalese.Tokenizer.data_cleaning.near_dedup import NearDeduplicator
 
 
 class Pipeline:

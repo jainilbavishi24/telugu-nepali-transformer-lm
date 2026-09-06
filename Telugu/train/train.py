@@ -33,6 +33,13 @@ How it keeps the GPU busy (all of this is under `runtime:` in the config):
 Usage:
     python train.py --config ../configs/config1.yaml
     python train.py --config ../configs/config1.yaml --benchmark 50
+    python train.py --config ../configs/config1.yaml --gpus 1   # force single GPU
+
+Multi-GPU is automatic: if more than one CUDA device is visible, train.py
+spawns one process per GPU and wraps the model in DistributedDataParallel.
+global_batch_tokens stays fixed, so 2 GPUs each do half the work of one and the
+optimization is unchanged — the run just finishes sooner. Pass --gpus 1 to opt
+out. torchrun also works (LOCAL_RANK/WORLD_SIZE are picked up if already set).
 
 --benchmark runs a handful of timed steps, reports tokens/sec, peak memory and
 the projected wall clock for the configured token budget, then exits without
@@ -47,12 +54,13 @@ import argparse
 import csv
 import json
 import math
+import os
 import random
 import shutil
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # train.py lives in Telugu/train/, the packages it imports live in Telugu/, so
@@ -65,9 +73,12 @@ if str(_ROOT) not in sys.path:
 
 import numpy as np
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from model.transformer import LanguageModel
 
@@ -117,6 +128,20 @@ def get_device(rt: dict) -> torch.device:
     return torch.device("cpu")
 
 
+def bf16_native(device: torch.device) -> bool:
+    """True only where bf16 has real tensor-core support (compute capability 8.0+).
+
+    `torch.cuda.is_bf16_supported()` is not the right test: on newer PyTorch it
+    also returns True for cards that can only *emulate* bf16, which includes the
+    T4 (sm_75). Emulated bf16 is slower than plain fp16 there, so Turing should
+    take the fp16 + GradScaler path instead.
+    """
+    if device.type != "cuda" or not torch.cuda.is_available():
+        return False
+    major, _ = torch.cuda.get_device_capability(device if device.index is not None else None)
+    return major >= 8
+
+
 def seed_everything(seed: int) -> None:
     """Seed every RNG the run touches, so two launches with the same config and
     the same step count produce the same weights."""
@@ -131,6 +156,82 @@ def fmt_hms(seconds: float) -> str:
     """Seconds -> H:MM:SS, for progress lines."""
     seconds = int(max(0.0, seconds))
     return f"{seconds // 3600:d}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
+
+
+# ---------------------------------------------------------------------------
+# multi-GPU (DistributedDataParallel)
+# ---------------------------------------------------------------------------
+#
+# Two GPUs, one process each. Every rank holds a full copy of the model and a
+# full copy of the token file, takes a different slice of each global batch,
+# and DDP all-reduces the gradients during the backward pass so all ranks apply
+# an identical update.
+#
+# Why not nn.DataParallel, which is one line instead of all this: it re-copies
+# the model to every device on *every* forward, gathers all outputs back onto
+# cuda:0 before the loss, and cannot be combined with torch.compile (replicating
+# a compiled module drops its parameters). Gathering matters here in particular
+# because the output of this model is (batch, seq_len, vocab_size) logits — at
+# 64 x 512 x 8000 that is ~0.5 GB per step moved onto one card for nothing.
+# DDP exchanges gradients instead, which are 25M numbers regardless of batch.
+
+def ddp_is_active() -> bool:
+    return dist.is_available() and dist.is_initialized()
+
+
+def ddp_setup(rank: int, world_size: int) -> torch.device:
+    """Join the process group and bind this process to its own GPU.
+
+    The timeout is raised from the 30-minute default because the very first
+    barrier can sit behind rank 0 downloading ~1 GB of .bin files.
+    """
+    os.environ.setdefault("MASTER_ADDR", "127.0.0.1")
+    os.environ.setdefault("MASTER_PORT", "29500")
+    torch.cuda.set_device(rank)
+    dist.init_process_group(
+        backend="nccl", rank=rank, world_size=world_size,
+        timeout=timedelta(hours=2),
+    )
+    return torch.device("cuda", rank)
+
+
+def ddp_cleanup() -> None:
+    if ddp_is_active():
+        dist.barrier()
+        dist.destroy_process_group()
+
+
+def ddp_any(flag: bool, device: torch.device) -> bool:
+    """True if `flag` is set on any rank — used so every rank stops together."""
+    if not ddp_is_active():
+        return flag
+    t = torch.tensor([1.0 if flag else 0.0], device=device)
+    dist.all_reduce(t, op=dist.ReduceOp.MAX)
+    return bool(t.item() > 0)
+
+
+def unwrap(model: nn.Module) -> nn.Module:
+    """Strip DDP and torch.compile wrappers to get the plain LanguageModel."""
+    seen = 0
+    while seen < 4:
+        if isinstance(model, DDP):
+            model = model.module
+        elif hasattr(model, "_orig_mod"):
+            model = model._orig_mod
+        else:
+            break
+        seen += 1
+    return model
+
+
+# Set once per process. Only rank 0 prints, or two GPUs produce two interleaved
+# copies of every line and the log becomes unreadable.
+_IS_MAIN = True
+
+
+def log(*args, **kwargs) -> None:
+    if _IS_MAIN:
+        print(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +310,7 @@ def build_optimizer(model: nn.Module, t: dict, device: torch.device):
 
     n_decay = sum(p.numel() for p in decay)
     n_plain = sum(p.numel() for p in no_decay)
-    print(
+    log(
         f"optimizer: AdamW ({impl}) | decayed {n_decay:,} params in {len(decay)} tensors "
         f"| undecayed {n_plain:,} in {len(no_decay)}"
     )
@@ -284,7 +385,7 @@ def resolve_bin(filename: str, data_cfg: dict, cache_dir: Path) -> Path:
         remote = min(matches, key=len)  # shallowest match
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    print(f"fetching {repo_id}:{remote}")
+    log(f"fetching {repo_id}:{remote}")
     return Path(
         hf_hub_download(
             repo_id=repo_id, filename=remote, repo_type=repo_type, local_dir=str(cache_dir)
@@ -312,7 +413,7 @@ def want_resident(paths, device: torch.device, mode) -> bool:
     total_bytes = sum(Path(p).stat().st_size for p in paths)
     free_bytes, _ = torch.cuda.mem_get_info()
     fits = total_bytes < 0.25 * free_bytes
-    print(
+    log(
         f"gpu_resident_data=auto -> {fits} ({total_bytes / 1024 ** 3:.2f} GB of tokens, "
         f"{free_bytes / 1024 ** 3:.1f} GB free)"
     )
@@ -367,7 +468,7 @@ class TokenStream:
             self.mm = mm
             where = "memmapped on host"
 
-        print(f"{self.name}: {self.n_tokens:,} tokens, {self.n_windows:,} windows ({where})")
+        log(f"{self.name}: {self.n_tokens:,} tokens, {self.n_windows:,} windows ({where})")
 
     def _init_resident(self, mm, vocab_size: int) -> None:
         """Upload the whole file to VRAM as int16, in bounded host-side blocks.
@@ -411,30 +512,40 @@ class TokenStream:
         gen_device = self.device if self.device.type in ("cpu", "cuda") else torch.device("cpu")
         self._gen = torch.Generator(device=gen_device)
 
-    def batch(self, step: int, micro_batch: int, accum: int):
-        """Yield the `accum` (input_ids, target_ids) micro-batches for step `step`.
+    def batch(self, step: int, micro_batch: int, accum: int,
+              rank: int = 0, world_size: int = 1):
+        """Yield this rank's `accum` (input_ids, target_ids) micro-batches for `step`.
 
         Both tensors come back (micro_batch, seq_len) int64 on `self.device`.
         The starts depend only on (seed, step), never on how many steps have
         already run, which is what makes resume exact.
+
+        Under DDP every rank draws the *whole* global batch from an identically
+        seeded generator and then keeps only its own rows. Two consequences:
+        the ranks never overlap, and the set of windows behind one optimizer
+        step is the same whether the run uses one GPU or eight — so a 2-GPU run
+        follows the same trajectory as the 1-GPU run it replaces, rather than
+        silently training on a different sample.
         """
+        total_accum = accum * world_size
+        lo = rank * accum
         if self.resident:
             self._gen.manual_seed(self._seed * 1_000_003 + step)
             starts = torch.randint(
-                0, self.n_windows, (accum, micro_batch),
+                0, self.n_windows, (total_accum, micro_batch),
                 device=self._gen.device, generator=self._gen,
             )
             if starts.device != self.device:
                 starts = starts.to(self.device)
-            for a in range(accum):
+            for a in range(lo, lo + accum):
                 # (micro_batch, 1) + (T + 1,) -> (micro_batch, T + 1)
                 window = self.tokens[starts[a].unsqueeze(1) + self._offsets].long()
                 yield window[:, :-1].contiguous(), window[:, 1:].contiguous()
         else:
             rng = np.random.default_rng(abs(self._seed * 1_000_003 + step))
-            for _ in range(accum):
-                sel = rng.integers(0, self.n_windows, size=micro_batch)
-                window = self._gather_host(sel).pin_memory().to(self.device, non_blocking=True)
+            all_sel = rng.integers(0, self.n_windows, size=(total_accum, micro_batch))
+            for a in range(lo, lo + accum):
+                window = self._gather_host(all_sel[a]).pin_memory().to(self.device, non_blocking=True)
                 yield window[:, :-1].contiguous(), window[:, 1:].contiguous()
 
     def _gather_host(self, starts) -> torch.Tensor:
@@ -444,18 +555,23 @@ class TokenStream:
         )
         return torch.from_numpy(rows.astype(np.int64))
 
-    def eval_batches(self, micro_batch: int, n_batches: int) -> list:
+    def eval_batches(self, micro_batch: int, n_batches: int,
+                     rank: int = 0, world_size: int = 1) -> list:
         """A fixed, evenly spaced set of windows spanning the whole file.
 
         Materialised once and reused at every eval, so the val loss at step 250
         and at step 9000 are measured on exactly the same text — the curve in
         the report then shows the model moving rather than the sample changing.
         It is also nearly free to keep: 1,536 windows of int64 is ~13 MB.
+
+        Under DDP the batch list is dealt out round-robin, so every rank scores
+        a disjoint slice of the same fixed set and the means are averaged back
+        together. The reported val loss is therefore independent of world size.
         """
         n_batches = max(1, min(int(n_batches), self.n_windows // max(1, micro_batch)))
         starts = np.linspace(0, self.n_windows - 1, n_batches * micro_batch).astype(np.int64)
         out = []
-        for b in range(n_batches):
+        for b in range(rank, n_batches, world_size):
             sel = starts[b * micro_batch : (b + 1) * micro_batch]
             if self.resident:
                 idx = torch.from_numpy(sel).to(self.device).unsqueeze(1) + self._offsets
@@ -480,10 +596,15 @@ def evaluate(model, batches, autocast_ctx, ignore_index) -> tuple[float, float]:
     the end, which keeps the eval to a single sync no matter how many batches.
     Perplexity is exp(mean token loss); the guard just stops an early,
     still-random model from overflowing to inf in the CSV.
+
+    Under DDP each rank was handed a disjoint slice of the fixed eval set, so
+    the per-rank sums and counts are added across ranks before dividing. Ranks
+    can hold different numbers of batches when the set does not divide evenly,
+    which is why the count is reduced too rather than assumed equal.
     """
+    device = next(model.parameters()).device
     model.eval()
-    total = torch.zeros((), dtype=torch.float64, device=next(model.parameters()).device)
-    count = 0
+    stats = torch.zeros(2, dtype=torch.float64, device=device)
     for x, y in batches:
         with autocast_ctx():
             logits = model(x)
@@ -492,10 +613,13 @@ def evaluate(model, batches, autocast_ctx, ignore_index) -> tuple[float, float]:
             y.reshape(-1),
             ignore_index=ignore_index,
         )
-        total += loss.double()
-        count += 1
+        stats[0] += loss.double()
+        stats[1] += 1
     model.train()
-    avg = float(total.item() / max(1, count))
+    if ddp_is_active():
+        dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+    total, count = stats.tolist()
+    avg = total / max(1.0, count)
     return avg, float(math.exp(avg)) if avg < 20 else float("inf")
 
 
@@ -517,7 +641,7 @@ def save_checkpoint(path: Path, raw_model, optimizer, scheduler, step: int,
         "step": step,
         "tokens_seen": tokens_seen,
         "best_val_loss": best_val,
-        "model_state_dict": raw_model.state_dict(),
+        "model_state_dict": unwrap(raw_model).state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "scheduler_state_dict": scheduler.state_dict(),
         "config": cfg,
@@ -547,7 +671,7 @@ def load_checkpoint(path: Path, raw_model, optimizer, scheduler,
     batch selection is driven by (seed, step), so it does not depend on this.
     """
     ckpt = torch.load(path, map_location=device, weights_only=False)
-    raw_model.load_state_dict(ckpt["model_state_dict"])
+    unwrap(raw_model).load_state_dict(ckpt["model_state_dict"])
     optimizer.load_state_dict(ckpt["optimizer_state_dict"])
     scheduler.load_state_dict(ckpt["scheduler_state_dict"])
 
@@ -562,12 +686,12 @@ def load_checkpoint(path: Path, raw_model, optimizer, scheduler,
         if rng.get("cuda") is not None and torch.cuda.is_available():
             torch.cuda.set_rng_state_all(rng["cuda"])
     except (RuntimeError, ValueError, TypeError) as exc:
-        print(f"  (rng state not restored: {exc})")
+        log(f"  (rng state not restored: {exc})")
 
     step = int(ckpt.get("step", 0))
     tokens_seen = int(ckpt.get("tokens_seen", 0))
     best_val = float(ckpt.get("best_val_loss", float("inf")))
-    print(f"resumed from {path} at step {step:,} ({tokens_seen:,} tokens seen)")
+    log(f"resumed from {path} at step {step:,} ({tokens_seen:,} tokens seen)")
     return step, tokens_seen, best_val
 
 
@@ -596,14 +720,30 @@ def prune_snapshots(out_dir: Path, keep: int) -> None:
 # ---------------------------------------------------------------------------
 
 def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
-         override_out: str | None = None) -> None:
+         override_out: str | None = None, rank: int = 0, world_size: int = 1) -> None:
+    global _IS_MAIN
+    _IS_MAIN = rank == 0
+    is_main = _IS_MAIN
+
     cfg = load_config(config_path)
     m, t, dcfg = cfg["model"], cfg["training"], cfg["data"]
     rt = cfg.get("runtime", {})
 
-    device = get_device(rt)
+    if world_size > 1:
+        device = ddp_setup(rank, world_size)
+        get_device(rt)  # switch on TF32 / cudnn benchmark on this rank too
+        log(f"DDP: {world_size} processes, one per GPU "
+            f"({[torch.cuda.get_device_name(i) for i in range(world_size)]})")
+    else:
+        device = get_device(rt)
+
     seed = int(t.get("seed", 42))
-    seed_everything(seed)
+    # Offset the global seed by rank so the two GPUs do not draw the *same*
+    # dropout masks for different rows. Weight init still matches: DDP
+    # broadcasts rank 0's parameters when it is constructed, a few lines below.
+    # Data sampling is unaffected either way — TokenStream drives its own
+    # generator off (seed, step), not off the global RNG.
+    seed_everything(seed + rank)
 
     # ---- precision -------------------------------------------------------
     # autocast only changes the dtype the matmuls run in. It keeps a master
@@ -614,10 +754,12 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
     if precision not in AMP_DTYPES:
         raise ValueError(f"runtime.precision must be one of {sorted(AMP_DTYPES)}")
     if device.type != "cuda" and precision != "fp32":
-        print(f"no CUDA device -> falling back from {precision} to fp32")
+        log(f"no CUDA device -> falling back from {precision} to fp32")
         precision = "fp32"
-    elif precision == "bf16" and not torch.cuda.is_bf16_supported():
-        print("bf16 not supported here -> falling back to fp16")
+    elif precision == "bf16" and not bf16_native(device):
+        cc = torch.cuda.get_device_capability(device if device.index is not None else None)
+        log(f"bf16 needs compute capability 8.0+ (this GPU is sm_{cc[0]}{cc[1]}) "
+            f"-> falling back to fp16")
         precision = "fp16"
     amp_dtype = AMP_DTYPES[precision]
     use_amp = device.type == "cuda" and precision != "fp32"
@@ -638,15 +780,52 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
             scaler = torch.cuda.amp.GradScaler()
 
     # ---- batch geometry -------------------------------------------------
+    # `global_batch_tokens` is what the *optimizer* sees, summed over every
+    # GPU, so adding a second GPU halves the work each one does rather than
+    # doubling the batch. The optimization is therefore identical to the
+    # single-GPU run; only the wall clock changes.
+    #
+    #   per_rank_tokens = global_batch_tokens / world_size
+    #   micro_batch     = rows one GPU forwards at a time
+    #   grad_accum      = per_rank_tokens / (micro_batch * max_seq_len)
+    #
+    # config.batch_size is treated as a memory *ceiling*: if a rank's share of
+    # the global batch is smaller than one micro batch, the micro batch shrinks
+    # to match instead of overshooting the global batch.
     batch_size = int(t.get("batch_size", 64))
     max_seq_len = int(m.get("max_seq_len", 512))
     global_batch_tokens = int(t.get("global_batch_tokens", batch_size * max_seq_len))
-    if global_batch_tokens % (batch_size * max_seq_len) != 0:
+
+    if global_batch_tokens % world_size != 0:
         raise ValueError(
             f"global_batch_tokens={global_batch_tokens} is not divisible by "
-            f"(batch_size={batch_size} * max_seq_len={max_seq_len})"
+            f"world_size={world_size}"
         )
-    grad_accum_steps = global_batch_tokens // (batch_size * max_seq_len)
+    per_rank_tokens = global_batch_tokens // world_size
+    if per_rank_tokens % max_seq_len != 0:
+        raise ValueError(
+            f"global_batch_tokens/world_size={per_rank_tokens} is not divisible "
+            f"by max_seq_len={max_seq_len}"
+        )
+    micro_batch = min(batch_size, per_rank_tokens // max_seq_len)
+    if micro_batch < 1:
+        raise ValueError(
+            f"global_batch_tokens={global_batch_tokens} is too small to split "
+            f"across {world_size} GPUs at max_seq_len={max_seq_len}"
+        )
+    if per_rank_tokens % (micro_batch * max_seq_len) != 0:
+        raise ValueError(
+            f"global_batch_tokens/world_size={per_rank_tokens} is not divisible "
+            f"by (batch_size={micro_batch} * max_seq_len={max_seq_len})"
+        )
+    grad_accum_steps = per_rank_tokens // (micro_batch * max_seq_len)
+    if world_size > 1:
+        log(f"batch geometry: {global_batch_tokens:,} global tokens/step = "
+            f"{world_size} ranks x {grad_accum_steps} accum x {micro_batch} rows "
+            f"x {max_seq_len} tokens")
+        if micro_batch != batch_size:
+            log(f"  (micro batch reduced {batch_size} -> {micro_batch} to keep the "
+                f"global batch at {global_batch_tokens:,} tokens)")
 
     # ---- step count ------------------------------------------------------
     train_tokens = int(t.get("train_tokens", 300_000_000))
@@ -660,7 +839,24 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
     # ---- model -----------------------------------------------------------
     raw_model = build_model(cfg).to(device)
     total_params, compute_params = count_params(raw_model)
-    print(f"model: {total_params:,} total params, {compute_params:,} compute params")
+    log(f"model: {total_params:,} total params, {compute_params:,} compute params")
+
+    # ---- DistributedDataParallel ------------------------------------------
+    # One process per GPU. DDP all-reduces the gradients inside backward(), in
+    # buckets, so the communication for the early layers overlaps with the
+    # compute for the later ones. `raw_model` stays the plain module: the
+    # optimizer, clip_grad_norm_ and state_dict() all go through it, so nothing
+    # downstream has to know whether DDP is on.
+    if world_size > 1:
+        ddp_model = DDP(
+            raw_model,
+            device_ids=[rank],
+            output_device=rank,
+            gradient_as_bucket_view=True,  # reuse the bucket as the .grad storage
+            broadcast_buffers=False,       # RoPE cos/sin are recomputed, not learned
+        )
+    else:
+        ddp_model = raw_model
 
     # ---- optimiser & schedule --------------------------------------------
     optimizer = build_optimizer(raw_model, t, device)
@@ -671,22 +867,27 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
 
     # ---- torch.compile ---------------------------------------------------
     # dynamic=False promises that every input shape is the one we compiled
-    # with, which lets Inductor fuse the attention mask path. The compiled
-    # wrapper only appears on `model`; `raw_model` stays plain for checkpoints.
-    model = raw_model
+    # with, which lets Inductor fuse the attention mask path. Compile the DDP
+    # wrapper rather than the module inside it: Dynamo has to see DDP to run
+    # DDPOptimizer, which splits the graph on the gradient bucket boundaries so
+    # the all-reduces can still overlap with backward. `raw_model` stays
+    # uncompiled, so state_dict() has no `_orig_mod.` prefix.
+    model = ddp_model
     compiled = False
     if device.type == "cuda" and rt.get("compile", True):
         mode = rt.get("compile_mode", "default")
         try:
-            model = torch.compile(raw_model, mode=mode, dynamic=False)
+            model = torch.compile(ddp_model, mode=mode, dynamic=False)
             compiled = True
-            print(f"torch.compile enabled (mode={mode})")
+            log(f"torch.compile enabled (mode={mode})")
         except Exception as exc:
-            print(f"torch.compile failed, staying eager: {exc}")
+            model = ddp_model
+            log(f"torch.compile failed, staying eager: {exc}")
 
     # ---- forward/backward closure ----------------------------------------
     V = m["vocab_size"]
-    ignore_index = m.get("pad_token_id", -100)
+    pad_token_id = m.get("pad_token_id")
+    ignore_index = pad_token_id if pad_token_id is not None else -100
 
     def fwd_bwd(x, y, scale: float):
         """One forward/backward under autocast. Returns the *scaled* loss."""
@@ -701,11 +902,22 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
             (loss * scale).backward()
         return loss
 
-    # ---- data: locate and optionally upload the .bin files ---------------
+    # ---- data: locate and optionally download the .bin files -------------
+    # Only rank 0 may hit the network: two processes downloading into the same
+    # cache path would race on the same partial file. The others wait at the
+    # barrier and then find the file already there.
     cache_dir = Path(dcfg.get("out_dir", "data_bins/telugu"))
-    train_bin = resolve_bin(dcfg.get("train_bin", "pretrain_train.bin"), dcfg, cache_dir)
-    val_bin = resolve_bin(dcfg.get("val_bin", "pretrain_val.bin"), dcfg, cache_dir)
+    if is_main or world_size == 1:
+        train_bin = resolve_bin(dcfg.get("train_bin", "pretrain_train.bin"), dcfg, cache_dir)
+        val_bin = resolve_bin(dcfg.get("val_bin", "pretrain_val.bin"), dcfg, cache_dir)
+    if world_size > 1:
+        dist.barrier()
+        if not is_main:
+            train_bin = resolve_bin(dcfg.get("train_bin", "pretrain_train.bin"), dcfg, cache_dir)
+            val_bin = resolve_bin(dcfg.get("val_bin", "pretrain_val.bin"), dcfg, cache_dir)
 
+    # Each rank keeps its own copy of the token stream in its own VRAM
+    # (~0.8 GB for this corpus), so there is no cross-GPU reading during a step.
     resident = want_resident([train_bin, val_bin], device, rt.get("gpu_resident_data", "auto"))
     train_stream = TokenStream(
         train_bin, max_seq_len, device, V, seed, "train", resident
@@ -715,14 +927,20 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
     )
 
     # ---- validation windows ----------------------------------------------
+    # The eval set stays the same 1,536 fixed windows regardless of world size;
+    # the ranks just split the batches between them and the losses are summed
+    # back together in evaluate().
     eval_iters = int(t.get("eval_iters", 24))
-    val_batches = val_stream.eval_batches(batch_size, eval_iters)
+    val_batches = val_stream.eval_batches(batch_size, eval_iters, rank, world_size)
 
     # ---- output directory ------------------------------------------------
     out_dir = Path(override_out or t.get("out_dir", "checkpoints/telugu"))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- resume or start fresh -------------------------------------------
+    # Every rank loads the same checkpoint. DDP broadcasts rank 0's weights when
+    # it is constructed, which happens before this point, so a rank-0-only load
+    # would leave the other ranks on the initial weights.
     start_step = 0
     tokens_seen = 0
     best_val_loss = float("inf")
@@ -740,26 +958,26 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
     # Running one tiny batch now means the actual timing loop sees a compiled
     # model from step 0. The offset -1 signals "warmup only" to the sampler.
     if compiled and start_step == 0:
-        print("warming up torch.compile (first call triggers the compile)...")
+        log("warming up torch.compile (first call triggers the compile)...")
         try:
-            x0, y0 = next(train_stream.batch(-1, batch_size, grad_accum_steps))
+            x0, y0 = next(train_stream.batch(-1, micro_batch, grad_accum_steps, rank, world_size))
             _ = fwd_bwd(x0, y0, 1.0 / grad_accum_steps)
             optimizer.zero_grad(set_to_none=True)
         except Exception as exc:
-            print(f"compile warmup failed, reverting to eager: {exc}")
-            model = raw_model
+            log(f"compile warmup failed, reverting to eager: {exc}")
+            model = ddp_model
             compiled = False
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats()
 
     # ---- benchmark mode --------------------------------------------------
     if benchmark_steps > 0:
-        print(f"\n-- benchmarking {benchmark_steps} steps --")
+        log(f"\n-- benchmarking {benchmark_steps} steps --")
         torch.cuda.synchronize()
         t0 = time.time()
         for bs in range(benchmark_steps):
             step = start_step + bs
-            for x, y in train_stream.batch(step, batch_size, grad_accum_steps):
+            for x, y in train_stream.batch(step, micro_batch, grad_accum_steps, rank, world_size):
                 _ = fwd_bwd(x, y, 1.0 / grad_accum_steps)
             if scaler is not None:
                 scaler.step(optimizer)
@@ -772,20 +990,28 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
         tok_per_sec = benchmark_steps * global_batch_tokens / elapsed
         peak_gb = torch.cuda.max_memory_allocated() / 1024 ** 3 if device.type == "cuda" else 0.0
         projected = fmt_hms(max_steps * elapsed / benchmark_steps)
-        print(f"  {tok_per_sec:,.0f} tokens/sec | peak {peak_gb:.1f} GB | projected {projected}")
+        log(f"  {tok_per_sec:,.0f} tokens/sec | peak {peak_gb:.1f} GB/GPU | projected {projected}")
+        ddp_cleanup()
         return
 
     # ---- logging ---------------------------------------------------------
+    # Only rank 0 writes: two processes appending to one CSV would interleave
+    # rows, and the numbers are already reduced across ranks by then.
     log_interval = int(rt.get("log_interval", 10))
     print_interval = int(rt.get("print_interval", 100))
-    csv_path = out_dir / "loss_log.csv"
-    csv_file = open(csv_path, "w", newline="", encoding="utf-8")
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow([
-        "step", "tokens", "train_loss", "val_loss", "val_ppl", "lr",
-        "grad_norm", "tokens_per_sec", "mfu", "elapsed_s", "peak_mem_gb"
-    ])
-    csv_file.flush()
+    csv_file = None
+    csv_writer = None
+    if is_main:
+        csv_path = out_dir / "loss_log.csv"
+        append = start_step > 0 and csv_path.exists()
+        csv_file = open(csv_path, "a" if append else "w", newline="", encoding="utf-8")
+        csv_writer = csv.writer(csv_file)
+        if not append:
+            csv_writer.writerow([
+                "step", "tokens", "train_loss", "val_loss", "val_ppl", "lr",
+                "grad_norm", "tokens_per_sec", "mfu", "elapsed_s", "peak_mem_gb"
+            ])
+            csv_file.flush()
 
     # ---- training loop ---------------------------------------------------
     grad_clip = float(t.get("grad_clip", 1.0))
@@ -793,7 +1019,7 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
     save_interval = int(t.get("save_interval", 500))
     snapshot_interval = int(t.get("snapshot_interval", 2000))
     keep_snapshots = int(t.get("keep_snapshots", 3))
-    gpu_peak_tflops = float(rt.get("gpu_peak_tflops", 181.05))
+    gpu_peak_tflops = float(rt.get("gpu_peak_tflops", 181.05)) * world_size
     flops_tok = flops_per_token(compute_params, m.get("num_layers", 8), max_seq_len, m.get("embed_dim", 512))
 
     # Accumulate loss on-device to avoid a sync per step. The sync happens once
@@ -803,18 +1029,20 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
 
     start_time = time.time()
     interrupted = False
+    final_step = start_step
 
     def handle_signal(signum, frame):
         nonlocal interrupted
         interrupted = True
-        print(f"\ncaught signal {signum}, checkpointing and exiting...")
+        log(f"\ncaught signal {signum}, checkpointing and exiting...")
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    print(f"\nstarting training from step {start_step:,} to {max_steps:,}")
-    print(f"  global_batch_tokens={global_batch_tokens:,} | grad_accum={grad_accum_steps} | warmup={warmup_steps}")
-    print(f"  precision={precision} | compiled={compiled} | device={device}\n")
+    log(f"\nstarting training from step {start_step:,} to {max_steps:,}")
+    log(f"  global_batch_tokens={global_batch_tokens:,} | micro_batch={micro_batch} | "
+        f"grad_accum={grad_accum_steps} | world_size={world_size} | warmup={warmup_steps}")
+    log(f"  precision={precision} | compiled={compiled} | device={device}\n")
 
     for step in range(start_step, max_steps):
         if interrupted:
@@ -823,12 +1051,23 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
         lr = scheduler.get_last_lr()[0]
 
         # ---- gradient accumulation ---------------------------------------
-        for micro_x, micro_y in train_stream.batch(step, batch_size, grad_accum_steps):
-            loss = fwd_bwd(micro_x, micro_y, 1.0 / grad_accum_steps)
+        micros = train_stream.batch(step, micro_batch, grad_accum_steps, rank, world_size)
+        for i, (micro_x, micro_y) in enumerate(micros):
+            # DDP all-reduces gradients inside backward(). On the non-final
+            # micro-steps that traffic would be thrown away by the next
+            # accumulation, so hold the gradients locally and let only the last
+            # backward of the step synchronise.
+            if world_size > 1 and i < grad_accum_steps - 1:
+                with ddp_model.no_sync():
+                    loss = fwd_bwd(micro_x, micro_y, 1.0 / grad_accum_steps)
+            else:
+                loss = fwd_bwd(micro_x, micro_y, 1.0 / grad_accum_steps)
             window_loss += loss.detach().double()
             window_n += 1
 
         # ---- gradient clipping & optimizer step ---------------------------
+        # By this point the gradients are already averaged across ranks, so
+        # every rank computes the same norm and clips identically.
         if scaler is not None:
             scaler.unscale_(optimizer)
         grad_norm = torch.nn.utils.clip_grad_norm_(raw_model.parameters(), grad_clip)
@@ -842,11 +1081,22 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
         optimizer.zero_grad(set_to_none=True)
 
         tokens_seen += global_batch_tokens
+        final_step = step + 1
 
         # ---- logging ------------------------------------------------------
         if (step + 1) % log_interval == 0:
-            # One sync per log_interval, not per step
-            train_loss, gn = torch.stack([window_loss / max(1, window_n), grad_norm]).tolist()
+            # One sync per log_interval, not per step. The same collective
+            # averages the loss window across ranks and carries the interrupt
+            # flag, so all ranks agree on when to stop.
+            packed = torch.stack([
+                window_loss / max(1, window_n),
+                torch.as_tensor(grad_norm, dtype=torch.float64, device=device),
+            ])
+            if world_size > 1:
+                dist.all_reduce(packed, op=dist.ReduceOp.SUM)
+                packed /= world_size
+                interrupted = ddp_any(interrupted, device)
+            train_loss, gn = packed.tolist()
             window_loss.zero_()
             window_n = 0
             if math.isnan(train_loss):
@@ -857,86 +1107,109 @@ def main(config_path: str, resume: bool = True, benchmark_steps: int = 0,
             mfu = (tok_per_sec * flops_tok) / (gpu_peak_tflops * 1e12) if device.type == "cuda" else 0.0
             peak_gb = torch.cuda.max_memory_allocated() / 1024 ** 3 if device.type == "cuda" else 0.0
 
-            csv_writer.writerow([
-                step + 1, tokens_seen, train_loss, "", "", lr, gn,
-                tok_per_sec, mfu, elapsed, peak_gb
-            ])
-            csv_file.flush()
+            if is_main:
+                csv_writer.writerow([
+                    step + 1, tokens_seen, train_loss, "", "", lr, gn,
+                    tok_per_sec, mfu, elapsed, peak_gb
+                ])
+                csv_file.flush()
 
             if (step + 1) % print_interval == 0:
-                print(
+                log(
                     f"step {step + 1:,}/{max_steps:,} | tok {tokens_seen:,} | "
                     f"loss {train_loss:.4f} | lr {lr:.2e} | {tok_per_sec:,.0f} tok/s"
                 )
 
         # ---- evaluation ---------------------------------------------------
         if (step + 1) % eval_interval == 0:
+            # evaluate() is collective: every rank runs its share of the fixed
+            # val windows and the losses are all-reduced inside.
             val_loss, val_ppl = evaluate(model, val_batches, autocast_ctx, ignore_index)
             elapsed = time.time() - start_time
             tok_per_sec = (step + 1 - start_step) * global_batch_tokens / max(1e-9, elapsed)
             mfu = (tok_per_sec * flops_tok) / (gpu_peak_tflops * 1e12) if device.type == "cuda" else 0.0
             peak_gb = torch.cuda.max_memory_allocated() / 1024 ** 3 if device.type == "cuda" else 0.0
 
-            csv_writer.writerow([
-                step + 1, tokens_seen, "", val_loss, val_ppl, scheduler.get_last_lr()[0], "",
-                tok_per_sec, mfu, elapsed, peak_gb
-            ])
-            csv_file.flush()
-            print(f"  eval @ step {step + 1:,}: val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}")
+            if is_main:
+                csv_writer.writerow([
+                    step + 1, tokens_seen, "", val_loss, val_ppl, scheduler.get_last_lr()[0], "",
+                    tok_per_sec, mfu, elapsed, peak_gb
+                ])
+                csv_file.flush()
+            log(f"  eval @ step {step + 1:,}: val_loss={val_loss:.4f} val_ppl={val_ppl:.2f}")
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                save_checkpoint(best_path, raw_model, optimizer, scheduler, step + 1, tokens_seen, best_val_loss, cfg)
-                print(f"  new best -> {best_path}")
+                if is_main:
+                    save_checkpoint(best_path, raw_model, optimizer, scheduler, step + 1, tokens_seen, best_val_loss, cfg)
+                    log(f"  new best -> {best_path}")
 
         # ---- checkpointing ------------------------------------------------
-        if (step + 1) % save_interval == 0:
+        # Rank 0 only: every rank holds identical weights, so a second writer
+        # would just race on the same file.
+        if is_main and (step + 1) % save_interval == 0:
             save_checkpoint(latest_path, raw_model, optimizer, scheduler, step + 1, tokens_seen, best_val_loss, cfg)
 
-        if (step + 1) % snapshot_interval == 0:
+        if is_main and (step + 1) % snapshot_interval == 0:
             snap_path = out_dir / f"step_{step + 1}.pt"
             save_checkpoint(snap_path, raw_model, optimizer, scheduler, step + 1, tokens_seen, best_val_loss, cfg)
             prune_snapshots(out_dir, keep_snapshots)
 
     # ---- final save -------------------------------------------------------
-    save_checkpoint(latest_path, raw_model, optimizer, scheduler, max_steps, tokens_seen, best_val_loss, cfg)
-    csv_file.close()
+    if is_main:
+        save_checkpoint(latest_path, raw_model, optimizer, scheduler, final_step, tokens_seen, best_val_loss, cfg)
+        csv_file.close()
 
     # ---- write config and metadata ----------------------------------------
-    config_copy = out_dir / "config_used.yaml"
-    shutil.copy(config_path, config_copy)
+    if is_main:
+        shutil.copy(config_path, out_dir / "config_used.yaml")
 
-    meta = {
-        "total_params": total_params,
-        "compute_params": compute_params,
-        "device": str(device),
-        "device_name": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
-        "precision": precision,
-        "compiled": compiled,
-        "batch_size": batch_size,
-        "grad_accum_steps": grad_accum_steps,
-        "global_batch_tokens": global_batch_tokens,
-        "max_steps": max_steps,
-        "warmup_steps": warmup_steps,
-        "train_tokens": train_tokens,
-        "torch_version": torch.__version__,
-        "train_bin": str(train_bin),
-        "val_bin": str(val_bin),
-        "train_tokens_available": train_stream.n_tokens,
-        "val_tokens_available": val_stream.n_tokens,
-        "start_time": datetime.now(timezone.utc).isoformat(),
-    }
-    with open(out_dir / "run_meta.json", "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=2)
+        meta = {
+            "total_params": total_params,
+            "compute_params": compute_params,
+            "device": str(device),
+            "device_name": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
+            "world_size": world_size,
+            "precision": precision,
+            "compiled": compiled,
+            "micro_batch": micro_batch,
+            "batch_size": batch_size,
+            "grad_accum_steps": grad_accum_steps,
+            "global_batch_tokens": global_batch_tokens,
+            "max_steps": max_steps,
+            "steps_done": final_step,
+            "warmup_steps": warmup_steps,
+            "train_tokens": train_tokens,
+            "torch_version": torch.__version__,
+            "train_bin": str(train_bin),
+            "val_bin": str(val_bin),
+            "train_tokens_available": train_stream.n_tokens,
+            "val_tokens_available": val_stream.n_tokens,
+            "start_time": datetime.now(timezone.utc).isoformat(),
+        }
+        with open(out_dir / "run_meta.json", "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2)
 
     elapsed = time.time() - start_time
-    print(f"\ndone: {max_steps:,} steps, {tokens_seen:,} tokens in {fmt_hms(elapsed)}")
-    print(f"  final val_loss={best_val_loss:.4f} | checkpoints in {out_dir}")
+    log(f"\ndone: {final_step:,} steps, {tokens_seen:,} tokens in {fmt_hms(elapsed)}")
+    log(f"  best val_loss={best_val_loss:.4f} | checkpoints in {out_dir}")
+    ddp_cleanup()
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
+def _worker(rank: int, world_size: int, kwargs: dict) -> None:
+    """`mp.spawn` entry point — one process, one GPU."""
+    try:
+        main(rank=rank, world_size=world_size, **kwargs)
+    except BaseException:
+        # Without this the surviving ranks block forever on the next collective.
+        if dist.is_available() and dist.is_initialized():
+            dist.destroy_process_group()
+        raise
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the decoder-only LM")
@@ -956,11 +1229,37 @@ if __name__ == "__main__":
         "--out-dir", type=str, default=None,
         help="Override training.out_dir"
     )
+    parser.add_argument(
+        "--gpus", type=int, default=None,
+        help="How many GPUs to use (default: every visible one). --gpus 1 forces "
+             "a single-process run."
+    )
     args = parser.parse_args()
 
-    main(
+    kwargs = dict(
         config_path=args.config,
         resume=not args.no_resume,
         benchmark_steps=args.benchmark,
         override_out=args.out_dir,
     )
+
+    visible = torch.cuda.device_count()
+    requested = visible if args.gpus is None else args.gpus
+    world_size = max(1, min(requested, visible)) if visible > 0 else 1
+
+    if "WORLD_SIZE" in os.environ and "RANK" in os.environ:
+        # Started by torchrun: this process is already a single rank.
+        main(
+            rank=int(os.environ.get("LOCAL_RANK", os.environ["RANK"])),
+            world_size=int(os.environ["WORLD_SIZE"]),
+            **kwargs,
+        )
+    elif world_size > 1:
+        # Plain `python train.py` with 2 GPUs visible: fork one process per GPU.
+        # Nothing here touches device properties on purpose — querying them
+        # would create a CUDA context in this parent process that then sits on
+        # GPU 0's memory for the whole run. Rank 0 names the GPUs instead.
+        print(f"launching {world_size} processes, one per GPU")
+        mp.spawn(_worker, args=(world_size, kwargs), nprocs=world_size, join=True)
+    else:
+        main(rank=0, world_size=1, **kwargs)
