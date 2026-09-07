@@ -127,13 +127,13 @@ Calculated in `{Language}/eval/metrics.py`:
 **Telugu**
 
 
-[telugu_metrics](Telugu/eval/intrinsic_metrics.png)
+![telugu_metrics](Telugu/eval/intrinsic_metrics.png)
 
 
 **Nepalese**
 
 
-[Nepalese_metrics](Nepalese/eval/intrinsic_metrics.png)
+![Nepalese_metrics](Nepalese/eval/intrinsic_metrics.png)
 
 #### Possible Interpretations
 
@@ -143,13 +143,13 @@ Calculated in `{Language}/eval/metrics.py`:
 **Telugu**
 
 
-[telugu_metrics](Telugu/eval/generation_metrics.png)
+![telugu_metrics](Telugu/eval/generation_metrics.png)
 
 
 **Nepalese**
 
 
-[Nepalese_metrics](Nepalese/eval/generation_metrics.png)
+![Nepalese_metrics](Nepalese/eval/generation_metrics.png)
 
 
 
@@ -161,3 +161,69 @@ Note that, I cant read either of these languages (nepalese a little bit maybe). 
 
 
 ### Attention Evaluation
+
+#### Attention Heatmaps
+
+**Telugu**
+
+- Layer 0 (early layer):
+![layer0](Telugu/eval/telugu_layer_0.png)
+
+- Layer 3 (middle layer):
+![layer1](Telugu/eval/telugu_layer_3.png)
+
+
+- Layer 7 (late layer):
+![layer7](Telugu/eval/telugu_layer_7.png)
+
+
+Example text for all these plots are:
+
+పనిచేసింది. అల్ ఇండియా అస్సాం రైతుల సమావేశానికి కూడా నాయకత్వం వహించింది. 1972 లో భారత ప్రభుత్వం ఆమెను పద్మశ్రీతో సత్కరించింది. మళ్లీ 2002 లో, భారత ప్రభుత్వం ఆమె గౌరవార్థం స్మారక స్టాంపును విడుదల చేసింది. మరణం, వారసత్వం సైకియాని తన 72 వ పుట్టినరోజు నాడు, 1972 మార్చి 16 న క్యాన్సర్తో మరణించింది ఆమె మరణానికి కొన్ని నెలల ముందు,1972 లో, భారత ప్రభుత్వం ఆమెకు పద్మశ్రీ పురస్కారం ప్రదానం చేసింది. 2002 లో పోస్ట్ డిపార్ట్మెంట్ ఆఫ్ పోస్ట్స్ ద్వారా సంఘ సంస్కర్తల స్మారక తపాలా బిళ్ళను విడుదల చేసి ప్రభుత్వం ఆమెను సత్కరించింది. గౌహ
+
+
+
+**Nepalese**
+
+- Layer 0 (early layer):
+![layer0](Nepalese/eval/nepalese_layer_0.png)
+
+- Layer 3 (middle layer):
+![layer1](Nepalese/eval/nepalese_layer_3.png)
+
+
+- Layer 7 (late layer):
+![layer7](Nepalese/eval/nepalese_layer_7.png)
+
+
+Example text for all these plots are:
+
+
+बजाना (विविध मनोरञ्जनात्मक मैथिली गीतहरूको श्रव्यसँगालो), प्रकाशकः गङ्गा क्यासेट, नयादिल्ली, भारतः २०६३ भजन दिव्यानन्द (चट्याङ मास्टरद्वारा रचित नेपाली भक्तिरचनाहरूको रूका श्रव्यसँगालो), प्रकाशकः कान्ता गौतम, काठमाडौँ, नेपालः २०६१ वन-गीत (संरक्षणसम्बन्धी चेतनामूलक मैथिली गीतहरूको श्रव्यसँगालो), प्रकाशकः बाइसेप एसटी, काठमाडौँ, नेपालः २०६१ शैक्षिक कृतिहरू खिस्सा-पिहानी (मै
+
+
+#### Attention Entropy
+
+**Telugu**
+
+![entropy_tel](Telugu/eval/attention_entropy_per_head.png)
+
+**Nepalese**
+
+![entropy_nep](Nepalese/eval/attention_entropy_per_head.png)
+
+
+#### Mean Attention Distance
+
+**Telugu**
+
+![att_dist](Telugu/eval/mean_attention_distance_per_head.png)
+
+
+**Nepalese**
+
+![att_dist](Nepalese/eval/mean_attention_distance_per_head.png)
+
+
+
+#### Discussion/ Interpretation
