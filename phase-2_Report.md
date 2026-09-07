@@ -3,7 +3,7 @@
 In this phase, I implemented a GPT-style model (code located in `{Language}\models\`) that I then pre-trained with the corpus collected in phase-1. I then did my analysis, which I will note in this report.
 
 
-> I will split this report in 3 sections, - Implementation, - Results, - Conclusion
+> I will split this report in 2 sections, - Implementation, - Results
 
 
 ## IMPLEMENTATION
@@ -137,6 +137,10 @@ Calculated in `{Language}/eval/metrics.py`:
 
 #### Possible Interpretations
 
+Telugu model has a higher perplexity (38.96) compared with the Nepalese model (23.87). This indicates that the Telugu model is less confident in predicting the next token on its test set and therefore models the language less effectively under the current setup. The Telugu model also has a slightly higher bits-per-byte/token metric (0.769 vs. 0.618), further indicating higher uncertainty.
+
+This is a bit surprising, but I think it can be due to training/data collection. Telugu model was trained for (marginally) fewer steps that nepalese model. In data collection, for nepalese I collected text from a large collection of sources, so the diversity might have positively effected the model. 
+
 
 ### Generation Evaluation
 
@@ -154,6 +158,15 @@ Calculated in `{Language}/eval/metrics.py`:
 
 
 #### Possible Interpretation
+
+The Nepali model generally performs better in reference-based generation metrics, while both models show a similar decoding trade-off:
+
+- **BLEU**: Nepali is higher for greedy (2.50 vs. 1.42) and T=0.5 (1.79 vs. 1.82, essentially similar), while both drop substantially at higher temperatures. This suggests moderate-temperature generation can improve reference overlap, but higher sampling temperatures reduce it.
+- **chrF**: Nepali consistently has higher chrF than Telugu at greedy (18.00 vs. 11.95), T=0.5 (20.58 vs. 16.15), and T=1.0 (24.82 vs. 23.57). At T=1.5, the scores are very similar (22.86 vs. 23.11).
+- **ROUGE-L**: Nepali has slightly better ROUGE-L at greedy and T=1.0, while Telugu is slightly better at T=0.5 and T=1.5. Overall, both have very low ROUGE-L, indicating limited exact sequence overlap.
+- **Repetition**: Both models suffer from severe repetition under greedy decoding, with Rep-2/Rep-3 around 0.8. Increasing temperature greatly reduces repetition. At T=1.0, Telugu has slightly lower repetition than Nepali (Rep-2: 0.0468 vs. 0.0513), while at T=1.5 both are almost completely non-repetitive.
+- **Diversity**: Both models show the same strong increase in Distinct-1/2 as temperature increases. Telugu reaches slightly higher diversity at T=1.0 and T=1.5, whereas Nepali has higher diversity at T=0.5
+
 
 **coherence and language correctness**:
 Note that, I cant read either of these languages (nepalese a little bit maybe). I gave it to GPT and verified that the language was coherent although did not make sense.
@@ -224,6 +237,46 @@ Example text for all these plots are:
 
 ![att_dist](Nepalese/eval/mean_attention_distance_per_head.png)
 
+Heads with low attention distance and relatively low entropy are the strongest candidates for local behavior. In particular for Nepalese are:
+
+- Layer 0, Head 7: entropy ≈ 0.68, distance ≈ 4.40
+- Layer 0, Head 0: entropy ≈ 0.73, distance ≈ 5.30
+- Layer 1, Head 2: entropy ≈ 1.65, distance ≈ 3.12
+- Layer 3, Head 1: entropy ≈ 0.77, distance ≈ 2.97
+- Layer 4, Head 0: entropy ≈ 1.33, distance ≈ 5.11
+- Layer 4, Head 6: entropy ≈ 1.09, distance ≈ 6.14
+
+For Telugu:
+
+- Layer 0, Head 0: entropy ≈ 0.38, distance ≈ 3.7
+- Layer 4, Head 0: entropy ≈ 0.90, distance ≈ 3.9
+- Layer 3, Head 3: entropy ≈ 1.49, distance ≈ 4.0
+- Layer 2, Head 5: entropy ≈ 1.35, distance ≈ 5.9
+- Layer 2, Head 3: entropy ≈ 1.07, distance ≈ 6.2
+- Layer 1, Head 2: entropy ≈ 2.04, distance ≈ 6.5
+- Layer 1, Head 7: entropy ≈ 1.54, distance ≈ 6.8
+
+Heads with substantially larger attention distances indicate that they incorporate information from much farther back in the sequence. These heads for Nepalese maybe:
+
+- Layer 6, Head 6: distance ≈ 43.67
+- Layer 5, Head 4: distance ≈ 38.79
+- Layer 7, Head 2: distance ≈ 35.43
+- Layer 6, Head 4: distance ≈ 25.64
+- Layer 7, Head 7: distance ≈ 23.23
+
+For telugu:
+
+- Layer 5, Head 5: distance ≈ 43.6, entropy ≈ 1.90
+- Layer 5, Head 1: distance ≈ 40.3, entropy ≈ 2.08
+- Layer 7, Head 0: distance ≈ 31.8, entropy ≈ 2.84
+- Layer 7, Head 7: distance ≈ 31.2, entropy ≈ 2.69
+- Layer 2, Head 6: distance ≈ 30.0, entropy ≈ 3.15
+- Layer 3, Head 0: distance ≈ 29.1, entropy ≈ 2.70
+- Layer 4, Head 2: distance ≈ 29.3, entropy ≈ 3.00
 
 
-#### Discussion/ Interpretation
+the Telugu model shows substantial variation across heads, with both highly local heads and strongly long-range heads. The deeper layers generally contain more long-range heads than the earliest layers.
+
+The Nepali model shows a clear tendency for early layers to have shorter attention distances, while several deeper layers develop substantially longer-range attention. For example, Layer 0 contains heads with distances below 6 tokens, whereas Layer 6 contains heads reaching over 40 tokens. This suggests that the model may use lower layers primarily for local contextual and positional information and deeper layers for integrating more distant context
+
+Both models exhibit the same broad pattern: some heads specialize in local/positional attention while others attend over much longer distances, particularly in deeper layers. However, the degree of specialization differs. The Telugu model contains an especially concentrated local head in the first layer (Layer 0–Head 0, with entropy around 0.38 and distance around 3.7), while the Nepali model's corresponding local heads have somewhat higher entropy and distance (e.g. Layer 0–Head 0: ≈0.73 and 5.3 tokens). At the long-range end, the two models are quite similar: Nepali reaches about 43.7 tokens (Layer 6–Head 6), while Telugu reaches roughly 43 tokens (Layer 5–Head 5).
