@@ -4,6 +4,7 @@ import math
 
 import os
 import sys
+import json
 
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if root_dir not in sys.path:
@@ -51,6 +52,17 @@ class Metrics:
 
         self._init_model_from_checkpoint(model_path)
         self._init_dataloaders(stride=stride, seq_len=seq_len, batch_size=batch_size)
+        self.test_jsonl_path = self._download_test_jsonl(repo_id='iconically-mine/LMA-indivudal-project', filename='nepalese_test.jsonl', local_dir='.hf_cache/Nepalese')
+
+    def _download_test_jsonl(self, repo_id: str, filename: str, local_dir: str = ".hf_cache") -> str:
+        hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            local_dir=local_dir,
+            repo_type="dataset"
+        )
+        return f"{local_dir}/{filename}"
+
 
     def _init_dataloaders(self, stride: int = 256, seq_len: int = 512, batch_size: int = 16):
         self.test_loader = make_dataloader(
@@ -72,7 +84,7 @@ class Metrics:
         self.model.eval()
 
 
-    def compute_PPL(self):
+    def compute_PPL_BPB(self):
         total_loss = 0.0
         total_tokens = 0
 
@@ -88,8 +100,24 @@ class Metrics:
 
         avg_loss = total_loss / total_tokens
         ppl = math.exp(avg_loss)
-        return ppl
+        total_bits = avg_loss / math.log(2)
 
+        bpb = total_loss / self.count_test_bytes(self);
+        return ppl, bpb
+
+    def count_test_bytes(self, print_result=False):
+        total_bytes = 0
+
+        with open(self.test_jsonl_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                record = json.loads(line)
+                text = record["text"]
+                total_bytes += len(text.encode("utf-8"))
+
+        if print_result:
+            print(f'Total number of bytes in test set: {total_bytes}')
+
+        return total_bytes
 
     def test(self, stride: int = 256, seq_len: int = 512, batch_size: int = 16,  bin_path: str=f'data_bins/{LANGUAGE.lower()}/test_train.bin'):
         test_loader = make_dataloader(
@@ -110,8 +138,8 @@ class Metrics:
             break
 
 
-# def compute_PPL()
-
 if __name__ == "__main__":
     metrics = Metrics()
-    print(f"Perplexity: {metrics.compute_PPL()}")
+    # print(f"Perplexity: {metrics.compute_PPL()}")
+    print(f"Bits per token: {metrics.compute_BPB()}")
+    print(f"Total bytes in test set: {metrics.count_test_bytes(print_result=True)}")
