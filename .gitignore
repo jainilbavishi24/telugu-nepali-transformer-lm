@@ -8,3 +8,4 @@ Nepalese/data
 __pycache__/
 lid.176.bin
 data_bins/
+.hf_cache/
