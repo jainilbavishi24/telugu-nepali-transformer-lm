@@ -16,6 +16,9 @@ from Nepalese.train.lm_dataset import make_dataloader
 
 import yaml
 
+import numpy as np
+import sentencepiece as spm
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'mps')
 
 
@@ -119,27 +122,115 @@ class Metrics:
 
         return total_bytes
 
-    def test(self, stride: int = 256, seq_len: int = 512, batch_size: int = 16,  bin_path: str=f'data_bins/{LANGUAGE.lower()}/test_train.bin'):
-        test_loader = make_dataloader(
-            bin_path=bin_path,
-            seq_len=seq_len,
-            stride=stride,
-            batch_size=batch_size,
-            num_workers=0,
-            shuffle=False
+    def generate_examples(
+        self,
+        num_examples: int = 100,
+        prefix_len: int = 128,
+        max_new_tokens: int = 128,
+        temperature: float = 1.0,
+        greedy: bool = False,
+        output_path: str = "Nepalese/generation_examples_1_0.json",
+    ):
+        test_tokens = np.memmap(
+            f"data_bins/{LANGUAGE.lower()}/test_train.bin",
+            dtype=np.uint16,
+            mode="r",
         )
 
-        for x, y in test_loader:
-            print(f"x shape: {x.shape}, y shape: {y.shape}")
-            with torch.no_grad():
-                logits = self.model(x.to(device))
+        # Load the SentencePiece tokenizer
+        sp = spm.SentencePieceProcessor(
+            model_file=config["tokenizer"]["model_path"]
+        )
 
-            print(f"logits shape: {logits.shape}")
-            break
+        # Need prefix_len + max_new_tokens contiguous tokens
+        required_tokens = prefix_len + max_new_tokens
+
+        if len(test_tokens) < required_tokens:
+            raise ValueError("Test set is too small for generation.")
+
+        # Reproducible random starting positions
+        rng = np.random.default_rng(42)
+
+        starts = rng.choice(
+            len(test_tokens) - required_tokens + 1,
+            size=num_examples,
+            replace=False,
+        )
+
+        results = []
+
+        for i, start in enumerate(starts):
+
+            # 128-token prefix
+            prefix_ids = test_tokens[
+                start : start + prefix_len
+            ].astype(np.int64)
+
+            # Actual next 128 tokens from the test set
+            reference_ids = test_tokens[
+                start + prefix_len :
+                start + required_tokens
+            ].astype(np.int64)
+
+            # Convert prefix to [1, prefix_len]
+            prefix = torch.tensor(
+                prefix_ids,
+                dtype=torch.long,
+                device=device,
+            ).unsqueeze(0)
+
+            # Generate continuation
+            with torch.no_grad():
+                output = self.model.generate(
+                    prefix,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    greedy=greedy,
+                )
+
+            # Only keep newly generated tokens
+            generated_ids = output[0, prefix_len:]
+
+            # Decode
+            prefix_text = sp.decode(prefix_ids.tolist())
+            reference_text = sp.decode(reference_ids.tolist())
+            generated_text = sp.decode(generated_ids.tolist())
+
+            results.append({
+                "id": i,
+                "start_token": int(start),
+                "prefix": prefix_text,
+                "reference": reference_text,
+                "generated": generated_text,
+            })
+
+            if (i + 1) % 10 == 0:
+                print(f"Generated {i + 1}/{num_examples} examples")
+
+        # Save
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(
+                results,
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+
+        print(f"Saved {num_examples} examples to {output_path}")
+
 
 
 if __name__ == "__main__":
     metrics = Metrics()
     # print(f"Perplexity: {metrics.compute_PPL()}")
-    print(f"Bits per token: {metrics.compute_BPB()}")
-    print(f"Total bytes in test set: {metrics.count_test_bytes(print_result=True)}")
+    # print(f"Bits per token: {metrics.compute_BPB()}")
+    # print(f"Total bytes in test set: {metrics.count_test_bytes(print_result=True)}")
+
+    metrics.generate_examples(
+        num_examples=100,
+        prefix_len=128,
+        max_new_tokens=128,
+        temperature=1.5,
+        greedy=True,
+        output_path="Nepalese/generation_examples_greedy.json",
+    )

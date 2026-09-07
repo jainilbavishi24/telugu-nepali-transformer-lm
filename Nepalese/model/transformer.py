@@ -424,6 +424,7 @@ class LanguageModel(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: int | None = None,
+        greedy: bool = False,
     ):
         """
         Autoregressive generation.
@@ -450,40 +451,45 @@ class LanguageModel(nn.Module):
             # Only the final token matters for the next prediction.
             next_token_logits = logits[:, -1, :]
 
-            # Temperature scaling.
-            next_token_logits = next_token_logits / temperature
+            if greedy:
+                next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
 
-            # Optional top-k filtering.
-            if top_k is not None:
+            else:
 
-                if top_k <= 0:
-                    raise ValueError("top_k must be positive")
+                # Temperature scaling.
+                next_token_logits = next_token_logits / temperature
 
-                k = min(top_k, next_token_logits.size(-1))
+                # Optional top-k filtering.
+                if top_k is not None:
 
-                values, _ = torch.topk(
+                    if top_k <= 0:
+                        raise ValueError("top_k must be positive")
+
+                    k = min(top_k, next_token_logits.size(-1))
+
+                    values, _ = torch.topk(
+                        next_token_logits,
+                        k=k,
+                    )
+
+                    threshold = values[:, [-1]]
+
+                    next_token_logits = next_token_logits.masked_fill(
+                        next_token_logits < threshold,
+                        float("-inf"),
+                    )
+
+                # Convert logits -> probabilities.
+                probs = torch.softmax(
                     next_token_logits,
-                    k=k,
+                    dim=-1,
                 )
 
-                threshold = values[:, [-1]]
-
-                next_token_logits = next_token_logits.masked_fill(
-                    next_token_logits < threshold,
-                    float("-inf"),
+                # Sample next token.
+                next_token = torch.multinomial(
+                    probs,
+                    num_samples=1,
                 )
-
-            # Convert logits -> probabilities.
-            probs = torch.softmax(
-                next_token_logits,
-                dim=-1,
-            )
-
-            # Sample next token.
-            next_token = torch.multinomial(
-                probs,
-                num_samples=1,
-            )
 
             # Append.
             input_ids = torch.cat(
