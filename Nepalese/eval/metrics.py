@@ -226,11 +226,15 @@ if __name__ == "__main__":
     # print(f"Bits per token: {metrics.compute_BPB()}")
     # print(f"Total bytes in test set: {metrics.count_test_bytes(print_result=True)}")
 
-    metrics.generate_examples(
-        num_examples=100,
-        prefix_len=128,
-        max_new_tokens=128,
-        temperature=1.5,
-        greedy=True,
-        output_path="Nepalese/generation_examples_greedy.json",
-    )
+    # metrics.generate_examples(
+    #     num_examples=100,
+    #     prefix_len=128,
+    #     max_new_tokens=128,
+    #     temperature=1.5,
+    #     greedy=True,
+    #     output_path="Nepalese/generation_examples_greedy.json",
+    # )
+
+    ppl, bpb = metrics.compute_PPL_BPB()
+    print(f"Perplexity: {ppl}")
+    print(f"Bits per token: {bpb}")

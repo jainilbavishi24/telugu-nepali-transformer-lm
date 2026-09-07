@@ -1,11 +1,10 @@
-# Phase-1
+# Phase-2
 
-Refer `phase-1_Report.md` for overview or `Telugu/report.ipynb` and `Nepalese/report.ipynb` for language specific details.
+Refer `phase-2_Report.md`
 
 
 
-Telugu-Data: [Onedrive link](https://iiithydstudents-my.sharepoint.com/:f:/g/personal/sairithvik_achutuni_students_iiit_ac_in/IgAbPacchgqmSbVdKT_TAu02AV_TzGa3lH0fX3qgQWTVQYo?e=X4PVYz)
+[HF Dataset](https://huggingface.co/datasets/iconically-mine/LMA-indivudal-project)
 
-Nepalese-Data: [Onedrive link](https://iiithydstudents-my.sharepoint.com/:f:/g/personal/sairithvik_achutuni_students_iiit_ac_in/IgB_rhkn1aGUT7zohmQDVkhFAbUbEFUwaCcprLqYDNjeslo?e=PPGckq)
 
-If there are issues with onedrive: [HF Dataset](https://huggingface.co/datasets/iconically-mine/LMA-indivudal-project)
+[HF Models](https://huggingface.co/iconically-mine/LMA-individual-project)
