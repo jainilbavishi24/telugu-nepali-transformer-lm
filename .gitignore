@@ -11,3 +11,4 @@ data_bins/
 .hf_cache/
 attention_results/
 !reasoning_templates.json
+reasoning_dataset/
