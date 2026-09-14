@@ -1,0 +1,342 @@
+{
+  "catalog_version": "1.0",
+  "purpose": "Controlled templates for separate Telugu and Nepali synthetic comparative-reasoning datasets.",
+  "use": "Instantiate the logic first, compute the answer in code, then render only the language block for the selected language. Join the rendered fact strings before the question.",
+  "placeholders": {
+    "{A}, {B}, {C}, {D}": "Distinct entity names from the selected language's own name list.",
+    "{attribute}": "A domain noun. Telugu examples: ఎత్తు, వయస్సు, ధర, బరువు, దూరం. Nepali examples: उचाइ, उमेर, मूल्य, तौल, दूरी.",
+    "{A_gt_B}": "The program has verified that A's attribute is greater than B's attribute.",
+    "{A_eq_B}": "The program has verified that A's attribute equals B's attribute."
+  },
+  "rules": [
+    "Keep each language's entity list, random seed, generated examples, and split files separate.",
+    "Do not display the symbolic logic fields to the model; they are generator metadata only.",
+    "For each instance, calculate the answer from the hidden values or comparison graph, never from an LLM-generated answer.",
+    "For exact-match evaluation, normalize whitespace and terminal punctuation, but do not accept a different entity or relation label."
+  ],
+  "templates": [
+    {
+      "id": "direct_argmax",
+      "family": "direct",
+      "logic": {"facts": ["A > B"], "query": "argmax(A,B)", "answer": "A"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A} మరియు {B}లో ఎవరి {attribute} ఎక్కువగా ఉంది?",
+        "reasoning": "{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది. కాబట్టి {A} సరైన సమాధానం.",
+        "answer": "{A}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।"],
+        "question": "{A} र {B}मध्ये कसको {attribute} बढी छ?",
+        "reasoning": "{A} को {attribute} {B} को {attribute} भन्दा बढी छ। त्यसैले सही उत्तर {A} हो।",
+        "answer": "{A}"
+      }
+    },
+    {
+      "id": "direct_argmin",
+      "family": "direct",
+      "logic": {"facts": ["A > B"], "query": "argmin(A,B)", "answer": "B"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A} మరియు {B}లో ఎవరి {attribute} తక్కువగా ఉంది?",
+        "reasoning": "{A} యొక్క {attribute} ఎక్కువగా ఉంది. కాబట్టి {B} యొక్క {attribute} తక్కువగా ఉంది.",
+        "answer": "{B}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।"],
+        "question": "{A} र {B}मध्ये कसको {attribute} कम छ?",
+        "reasoning": "{A} को {attribute} बढी छ। त्यसैले {B} को {attribute} कम छ।",
+        "answer": "{B}"
+      }
+    },
+    {
+      "id": "direct_is_greater",
+      "family": "direct_yes_no",
+      "logic": {"facts": ["A > B"], "query": "A > B?", "answer": "yes"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A} యొక్క {attribute}, {B} యొక్క {attribute} కంటే ఎక్కువగా ఉందా?",
+        "reasoning": "ఇచ్చిన సమాచారం ప్రకారం {A} యొక్క {attribute} ఎక్కువగా ఉంది.",
+        "answer": "అవును"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।"],
+        "question": "के {A} को {attribute}, {B} को {attribute} भन्दा बढी छ?",
+        "reasoning": "दिइएको जानकारीअनुसार {A} को {attribute} बढी छ।",
+        "answer": "हो"
+      }
+    },
+    {
+      "id": "direct_is_less",
+      "family": "direct_yes_no",
+      "logic": {"facts": ["A > B"], "query": "A < B?", "answer": "no"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A} యొక్క {attribute}, {B} యొక్క {attribute} కంటే తక్కువగా ఉందా?",
+        "reasoning": "{A} యొక్క {attribute} ఎక్కువగా ఉంది, తక్కువగా కాదు.",
+        "answer": "కాదు"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।"],
+        "question": "के {A} को {attribute}, {B} को {attribute} भन्दा कम छ?",
+        "reasoning": "{A} को {attribute} बढी छ, कम छैन।",
+        "answer": "होइन"
+      }
+    },
+    {
+      "id": "direct_equal",
+      "family": "equality",
+      "logic": {"facts": ["A = B"], "query": "A = B?", "answer": "yes"},
+      "telugu": {
+        "facts": ["{A} మరియు {B} యొక్క {attribute} ఒకేలా ఉంది."],
+        "question": "{A} మరియు {B} యొక్క {attribute} సమానంగా ఉందా?",
+        "reasoning": "ఇచ్చిన సమాచారం ప్రకారం ఇద్దరి {attribute} ఒకేలా ఉంది.",
+        "answer": "అవును"
+      },
+      "nepali": {
+        "facts": ["{A} र {B} को {attribute} बराबर छ।"],
+        "question": "के {A} र {B} को {attribute} बराबर छ?",
+        "reasoning": "दिइएको जानकारीअनुसार दुवैको {attribute} बराबर छ।",
+        "answer": "हो"
+      }
+    },
+    {
+      "id": "two_hop_argmax",
+      "family": "two_hop",
+      "logic": {"facts": ["A > B", "B > C"], "query": "argmax(A,B,C)", "answer": "A"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}లో ఎవరి {attribute} అత్యధికంగా ఉంది?",
+        "reasoning": "{A} యొక్క {attribute} {B} కంటే, {B} యొక్క {attribute} {C} కంటే ఎక్కువగా ఉంది. కాబట్టి {A} యొక్క {attribute} అత్యధికంగా ఉంది.",
+        "answer": "{A}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।"],
+        "question": "{A}, {B} र {C}मध्ये कसको {attribute} सबैभन्दा बढी छ?",
+        "reasoning": "{A} को {attribute} {B} भन्दा र {B} को {attribute} {C} भन्दा बढी छ। त्यसैले {A} को {attribute} सबैभन्दा बढी छ।",
+        "answer": "{A}"
+      }
+    },
+    {
+      "id": "two_hop_argmin",
+      "family": "two_hop",
+      "logic": {"facts": ["A > B", "B > C"], "query": "argmin(A,B,C)", "answer": "C"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}లో ఎవరి {attribute} అత్యల్పంగా ఉంది?",
+        "reasoning": "{C} యొక్క {attribute}, {B} కంటే తక్కువగా ఉంది; {B} యొక్క {attribute}, {A} కంటే తక్కువగా ఉంది. కాబట్టి {C} యొక్క {attribute} అత్యల్పంగా ఉంది.",
+        "answer": "{C}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।"],
+        "question": "{A}, {B} र {C}मध्ये कसको {attribute} सबैभन्दा कम छ?",
+        "reasoning": "{C} को {attribute}, {B} भन्दा कम छ र {B} को {attribute}, {A} भन्दा कम छ। त्यसैले {C} को {attribute} सबैभन्दा कम छ।",
+        "answer": "{C}"
+      }
+    },
+    {
+      "id": "two_hop_endpoint_relation",
+      "family": "two_hop",
+      "logic": {"facts": ["A > B", "B > C"], "query": "relation(A,C)", "answer": "greater"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A} యొక్క {attribute}, {C} యొక్క {attribute} కంటే ఎక్కువా, తక్కువా, లేక సమానమా?",
+        "reasoning": "{A} యొక్క {attribute} {B} కంటే, {B} యొక్క {attribute} {C} కంటే ఎక్కువగా ఉంది. కాబట్టి {A} యొక్క {attribute}, {C} కంటే ఎక్కువగా ఉంది.",
+        "answer": "ఎక్కువ"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।"],
+        "question": "के {A} को {attribute}, {C} को {attribute} भन्दा बढी, कम, वा बराबर छ?",
+        "reasoning": "{A} को {attribute} {B} भन्दा र {B} को {attribute} {C} भन्दा बढी छ। त्यसैले {A} को {attribute}, {C} भन्दा बढी छ।",
+        "answer": "बढी"
+      }
+    },
+    {
+      "id": "two_hop_middle_entity",
+      "family": "two_hop",
+      "logic": {"facts": ["A > B", "B > C"], "query": "middle(A,B,C)", "answer": "B"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}లో మధ్యస్థ {attribute} ఎవరిది?",
+        "reasoning": "{B} యొక్క {attribute}, {A} కంటే తక్కువగా మరియు {C} కంటే ఎక్కువగా ఉంది. కాబట్టి మధ్యస్థ {attribute} {B}ది.",
+        "answer": "{B}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।"],
+        "question": "{A}, {B} र {C}मध्ये मध्यम {attribute} कसको छ?",
+        "reasoning": "{B} को {attribute}, {A} भन्दा कम र {C} भन्दा बढी छ। त्यसैले मध्यम {attribute} {B} को छ।",
+        "answer": "{B}"
+      }
+    },
+    {
+      "id": "two_hop_reversed_wording_argmax",
+      "family": "two_hop_reversed_wording",
+      "logic": {"facts": ["A > B", "B > C"], "query": "argmax(A,B,C)", "answer": "A"},
+      "telugu": {
+        "facts": ["{B} యొక్క {attribute}, {A} యొక్క {attribute} కంటే తక్కువగా ఉంది.", "{C} యొక్క {attribute}, {B} యొక్క {attribute} కంటే తక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}లో ఎవరి {attribute} అత్యధికంగా ఉంది?",
+        "reasoning": "{B} కంటే {A} యొక్క {attribute} ఎక్కువగా ఉంది; {C} కంటే {B} యొక్క {attribute} ఎక్కువగా ఉంది. కాబట్టి {A} యొక్క {attribute} అత్యధికంగా ఉంది.",
+        "answer": "{A}"
+      },
+      "nepali": {
+        "facts": ["{B} को {attribute}, {A} को {attribute} भन्दा कम छ।", "{C} को {attribute}, {B} को {attribute} भन्दा कम छ।"],
+        "question": "{A}, {B} र {C}मध्ये कसको {attribute} सबैभन्दा बढी छ?",
+        "reasoning": "{A} को {attribute}, {B} भन्दा बढी छ र {B} को {attribute}, {C} भन्दा बढी छ। त्यसैले {A} को {attribute} सबैभन्दा बढी छ।",
+        "answer": "{A}"
+      }
+    },
+    {
+      "id": "three_hop_argmax",
+      "family": "three_hop",
+      "logic": {"facts": ["A > B", "B > C", "C > D"], "query": "argmax(A,B,C,D)", "answer": "A"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{C} యొక్క {attribute} {D} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}, {D}లో ఎవరి {attribute} అత్యధికంగా ఉంది?",
+        "reasoning": "{A} యొక్క {attribute} అత్యధికం, తరువాత {B}, తరువాత {C}, చివరగా {D}. కాబట్టి {A} యొక్క {attribute} అత్యధికంగా ఉంది.",
+        "answer": "{A}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।", "{C} को {attribute} {D} को {attribute} भन्दा बढी छ।"],
+        "question": "{A}, {B}, {C} र {D}मध्ये कसको {attribute} सबैभन्दा बढी छ?",
+        "reasoning": "{A} को {attribute} सबैभन्दा बढी छ, त्यसपछि {B}, त्यसपछि {C}, र अन्त्यमा {D} को छ। त्यसैले {A} को {attribute} सबैभन्दा बढी छ।",
+        "answer": "{A}"
+      }
+    },
+    {
+      "id": "three_hop_argmin",
+      "family": "three_hop",
+      "logic": {"facts": ["A > B", "B > C", "C > D"], "query": "argmin(A,B,C,D)", "answer": "D"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{C} యొక్క {attribute} {D} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}, {D}లో ఎవరి {attribute} అత్యల్పంగా ఉంది?",
+        "reasoning": "{A} యొక్క {attribute} అత్యధికం, తరువాత {B}, తరువాత {C}, చివరగా {D}. కాబట్టి {D} యొక్క {attribute} అత్యల్పంగా ఉంది.",
+        "answer": "{D}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।", "{C} को {attribute} {D} को {attribute} भन्दा बढी छ।"],
+        "question": "{A}, {B}, {C} र {D}मध्ये कसको {attribute} सबैभन्दा कम छ?",
+        "reasoning": "{A} को {attribute} सबैभन्दा बढी छ, त्यसपछि {B}, त्यसपछि {C}, र अन्त्यमा {D} को छ। त्यसैले {D} को {attribute} सबैभन्दा कम छ।",
+        "answer": "{D}"
+      }
+    },
+    {
+      "id": "three_hop_endpoint_relation",
+      "family": "three_hop",
+      "logic": {"facts": ["A > B", "B > C", "C > D"], "query": "relation(A,D)", "answer": "greater"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{C} యొక్క {attribute} {D} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A} యొక్క {attribute}, {D} యొక్క {attribute} కంటే ఎక్కువా, తక్కువా, లేక సమానమా?",
+        "reasoning": "{A} యొక్క {attribute}, {B} కంటే; {B} యొక్క {attribute}, {C} కంటే; {C} యొక్క {attribute}, {D} కంటే ఎక్కువగా ఉంది. కాబట్టి {A} యొక్క {attribute}, {D} కంటే ఎక్కువగా ఉంది.",
+        "answer": "ఎక్కువ"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।", "{C} को {attribute} {D} को {attribute} भन्दा बढी छ।"],
+        "question": "के {A} को {attribute}, {D} को {attribute} भन्दा बढी, कम, वा बराबर छ?",
+        "reasoning": "{A} को {attribute}, {B} भन्दा; {B} को {attribute}, {C} भन्दा; र {C} को {attribute}, {D} भन्दा बढी छ। त्यसैले {A} को {attribute}, {D} भन्दा बढी छ।",
+        "answer": "बढी"
+      }
+    },
+    {
+      "id": "rank_three_descending",
+      "family": "ranking",
+      "logic": {"facts": ["A > B", "B > C"], "query": "rank_desc(A,B,C)", "answer": "A,B,C"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{attribute}ను అత్యధికం నుండి అత్యల్పం వరకు క్రమంలో రాయండి.",
+        "reasoning": "{A} యొక్క {attribute} అత్యధికం, తరువాత {B}, చివరగా {C}. కాబట్టి క్రమం {A}, {B}, {C}.",
+        "answer": "{A}, {B}, {C}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।"],
+        "question": "{attribute} को क्रम सबैभन्दा बढीबाट सबैभन्दा कमसम्म लेख्नुहोस्।",
+        "reasoning": "{A} को {attribute} सबैभन्दा बढी, त्यसपछि {B}, र अन्त्यमा {C} को छ। त्यसैले क्रम {A}, {B}, {C} हो।",
+        "answer": "{A}, {B}, {C}"
+      }
+    },
+    {
+      "id": "rank_three_ascending",
+      "family": "ranking",
+      "logic": {"facts": ["A > B", "B > C"], "query": "rank_asc(A,B,C)", "answer": "C,B,A"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{attribute}ను అత్యల్పం నుండి అత్యధికం వరకు క్రమంలో రాయండి.",
+        "reasoning": "{C} యొక్క {attribute} అత్యల్పం, తరువాత {B}, చివరగా {A}. కాబట్టి క్రమం {C}, {B}, {A}.",
+        "answer": "{C}, {B}, {A}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।"],
+        "question": "{attribute} को क्रम सबैभन्दा कमबाट सबैभन्दा बढीसम्म लेख्नुहोस्।",
+        "reasoning": "{C} को {attribute} सबैभन्दा कम, त्यसपछि {B}, र अन्त्यमा {A} को छ। त्यसैले क्रम {C}, {B}, {A} हो।",
+        "answer": "{C}, {B}, {A}"
+      }
+    },
+    {
+      "id": "rank_four_descending",
+      "family": "ranking",
+      "logic": {"facts": ["A > B", "B > C", "C > D"], "query": "rank_desc(A,B,C,D)", "answer": "A,B,C,D"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{C} యొక్క {attribute} {D} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{attribute}ను అత్యధికం నుండి అత్యల్పం వరకు క్రమంలో రాయండి.",
+        "reasoning": "క్రమం {A}, {B}, {C}, {D}; ఎందుకంటే ప్రతి వ్యక్తి తరువాతి వ్యక్తి కంటే ఎక్కువ {attribute} కలిగి ఉన్నారు.",
+        "answer": "{A}, {B}, {C}, {D}"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} को {attribute} {C} को {attribute} भन्दा बढी छ।", "{C} को {attribute} {D} को {attribute} भन्दा बढी छ।"],
+        "question": "{attribute} को क्रम सबैभन्दा बढीबाट सबैभन्दा कमसम्म लेख्नुहोस्।",
+        "reasoning": "क्रम {A}, {B}, {C}, {D} हो, किनकि प्रत्येक व्यक्तिको {attribute} पछिल्लो व्यक्तिभन्दा बढी छ।",
+        "answer": "{A}, {B}, {C}, {D}"
+      }
+    },
+    {
+      "id": "equality_top_pair",
+      "family": "equality",
+      "logic": {"facts": ["A = B", "A > C"], "query": "argmax(A,B,C)", "answer": "A,B"},
+      "telugu": {
+        "facts": ["{A} మరియు {B} యొక్క {attribute} ఒకేలా ఉంది.", "{A} యొక్క {attribute} {C} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}లో ఎవరి {attribute} అత్యధికంగా ఉంది?",
+        "reasoning": "{A} మరియు {B} యొక్క {attribute} సమానం. అది {C} కంటే ఎక్కువ. కాబట్టి {A} మరియు {B} ఇద్దరిదీ అత్యధిక {attribute}.",
+        "answer": "{A}, {B}"
+      },
+      "nepali": {
+        "facts": ["{A} र {B} को {attribute} बराबर छ।", "{A} को {attribute} {C} को {attribute} भन्दा बढी छ।"],
+        "question": "{A}, {B} र {C}मध्ये कसको {attribute} सबैभन्दा बढी छ?",
+        "reasoning": "{A} र {B} को {attribute} बराबर छ। त्यो {C} भन्दा बढी छ। त्यसैले {A} र {B} दुवैको {attribute} सबैभन्दा बढी छ।",
+        "answer": "{A}, {B}"
+      }
+    },
+    {
+      "id": "equality_bottom_pair",
+      "family": "equality",
+      "logic": {"facts": ["A = B", "C > A"], "query": "argmin(A,B,C)", "answer": "A,B"},
+      "telugu": {
+        "facts": ["{A} మరియు {B} యొక్క {attribute} ఒకేలా ఉంది.", "{C} యొక్క {attribute} {A} యొక్క {attribute} కంటే ఎక్కువగా ఉంది."],
+        "question": "{A}, {B}, {C}లో ఎవరి {attribute} అత్యల్పంగా ఉంది?",
+        "reasoning": "{A} మరియు {B} యొక్క {attribute} సమానం. {C} యొక్క {attribute} వాటికంటే ఎక్కువ. కాబట్టి {A} మరియు {B} ఇద్దరిదీ అత్యల్ప {attribute}.",
+        "answer": "{A}, {B}"
+      },
+      "nepali": {
+        "facts": ["{A} र {B} को {attribute} बराबर छ।", "{C} को {attribute} {A} को {attribute} भन्दा बढी छ।"],
+        "question": "{A}, {B} र {C}मध्ये कसको {attribute} सबैभन्दा कम छ?",
+        "reasoning": "{A} र {B} को {attribute} बराबर छ। {C} को {attribute} तीभन्दा बढी छ। त्यसैले {A} र {B} दुवैको {attribute} सबैभन्दा कम छ।",
+        "answer": "{A}, {B}"
+      }
+    },
+    {
+      "id": "equality_then_greater_relation",
+      "family": "equality",
+      "logic": {"facts": ["A > B", "B = C"], "query": "relation(A,C)", "answer": "greater"},
+      "telugu": {
+        "facts": ["{A} యొక్క {attribute} {B} యొక్క {attribute} కంటే ఎక్కువగా ఉంది.", "{B} మరియు {C} యొక్క {attribute} ఒకేలా ఉంది."],
+        "question": "{A} యొక్క {attribute}, {C} యొక్క {attribute} కంటే ఎక్కువా, తక్కువా, లేక సమానమా?",
+        "reasoning": "{B} మరియు {C} యొక్క {attribute} సమానం. {A} యొక్క {attribute}, {B} కంటే ఎక్కువ. కాబట్టి {A} యొక్క {attribute}, {C} కంటే ఎక్కువ.",
+        "answer": "ఎక్కువ"
+      },
+      "nepali": {
+        "facts": ["{A} को {attribute} {B} को {attribute} भन्दा बढी छ।", "{B} र {C} को {attribute} बराबर छ।"],
+        "question": "के {A} को {attribute}, {C} को {attribute} भन्दा बढी, कम, वा बराबर छ?",
+        "reasoning": "{B} र {C} को {attribute} बराबर छ। {A} को {attribute}, {B} भन्दा बढी छ। त्यसैले {A} को {attribute}, {C} भन्दा बढी छ।",
+        "answer": "बढी"
+      }
+    }
+  ]
+}

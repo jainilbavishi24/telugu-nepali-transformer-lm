@@ -10,3 +10,4 @@ lid.176.bin
 data_bins/
 .hf_cache/
 attention_results/
+!reasoning_templates.json
