@@ -35,11 +35,11 @@ CONFIG_FILE = f"{LANGUAGE}/configs/config1.yaml"
 
 REPO_ID = "iconically-mine/LMA-individual-project"
 
-MODEL_FILE = f"{LANGUAGE}/best_{LANGUAGE.lower()}.pt"
+MODEL_FILE = "finetuned/Telugu/best_telugu_finetuned.pt"
 
 TEST_BIN = f"data_bins/{LANGUAGE.lower()}/test_train.bin"
 
-OUTPUT_DIR = "attention_results"
+OUTPUT_DIR = "Telugu/outputs/finetuned/attention_results"
 
 NUM_EXAMPLES = 5
 

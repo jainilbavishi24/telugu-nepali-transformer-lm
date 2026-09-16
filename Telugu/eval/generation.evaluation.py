@@ -11,10 +11,10 @@ import evaluate
 # =========================================================
 
 FILES = {
-    "Greedy": "Telugu/generation_examples_greedy.json",
-    "Temp 0.5": "Telugu/generation_examples_0_5.json",
-    "Temp 1.0": "Telugu/generation_examples_1_0.json",
-    "Temp 1.5": "Telugu/generation_examples_1_5.json",
+    "Greedy": "Telugu/generation_examples_greedy_finetuned.json",
+    "Temp 0.5": "Telugu/generation_examples_0_5_finetuned.json",
+    "Temp 1.0": "Telugu/generation_examples_1_0_finetuned.json",
+    "Temp 1.5": "Telugu/generation_examples_1_5_finetuned.json",
 }
 
 TOKENIZER_MODEL = "Telugu/tokenizer/models/telugu_sentencepiece_bpe_8k/telugu_bpe_8k.model"
@@ -269,7 +269,7 @@ if __name__ == "__main__":
     # -----------------------------------------------------
 
     with open(
-        "generation_metrics.json",
+        "Telugu/outputs/finetuned/generation_metrics.json",
         "w",
         encoding="utf-8"
     ) as f:
@@ -281,4 +281,4 @@ if __name__ == "__main__":
             indent=2
         )
 
-    print("\nSaved results to generation_metrics.json")
+    print("\nSaved results to Telugu/outputs/finetuned/generation_metrics.json")
