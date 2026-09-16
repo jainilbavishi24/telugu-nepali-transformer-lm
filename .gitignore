@@ -12,3 +12,7 @@ data_bins/
 attention_results/
 !reasoning_templates.json
 reasoning_dataset/
+!attention_metrics.json
+!generation_metrics.json
+!reasoning_evaluation_results.json
+!requirements.txt

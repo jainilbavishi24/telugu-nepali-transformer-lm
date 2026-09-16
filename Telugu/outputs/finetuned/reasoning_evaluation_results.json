@@ -1,0 +1,141 @@
+{
+  "language": "telugu",
+  "display_name": "Telugu",
+  "seed": 0,
+  "decoding": "greedy (argmax), early stop at answer-line newline or EOS",
+  "max_new_tokens": 120,
+  "n_examples": 1000,
+  "scoring": {
+    "strict": "exact match of normalized text after the answer marker",
+    "loose": "normalized gold answer appears anywhere (upper bound only)",
+    "format_compliance": "fraction of outputs that emitted an answer marker"
+  },
+  "chance_level": {
+    "two_hop": 0.3333333333333333,
+    "three_hop": 0.3333333333333333,
+    "ranking": 0.16666666666666666
+  },
+  "pretrained": {
+    "status": "ok",
+    "n": 1000,
+    "strict_correct": 0,
+    "strict_accuracy": 0.0,
+    "loose_correct": 265,
+    "loose_accuracy": 0.265,
+    "format_compliance": 0.0,
+    "by_family": {
+      "direct": {
+        "n": 117,
+        "strict_accuracy": 0.0,
+        "loose_accuracy": 0.6324786324786325,
+        "format_compliance": 0.0
+      },
+      "direct_yes_no": {
+        "n": 116,
+        "strict_accuracy": 0.0,
+        "loose_accuracy": 0.0,
+        "format_compliance": 0.0
+      },
+      "equality": {
+        "n": 195,
+        "strict_accuracy": 0.0,
+        "loose_accuracy": 0.26666666666666666,
+        "format_compliance": 0.0
+      },
+      "ranking": {
+        "n": 156,
+        "strict_accuracy": 0.0,
+        "loose_accuracy": 0.0,
+        "format_compliance": 0.0
+      },
+      "three_hop": {
+        "n": 150,
+        "strict_accuracy": 0.0,
+        "loose_accuracy": 0.3933333333333333,
+        "format_compliance": 0.0
+      },
+      "two_hop": {
+        "n": 213,
+        "strict_accuracy": 0.0,
+        "loose_accuracy": 0.352112676056338,
+        "format_compliance": 0.0
+      },
+      "two_hop_reversed_wording": {
+        "n": 53,
+        "strict_accuracy": 0.0,
+        "loose_accuracy": 0.09433962264150944,
+        "format_compliance": 0.0
+      }
+    }
+  },
+  "finetuned": {
+    "status": "ok",
+    "n": 1000,
+    "strict_correct": 704,
+    "strict_accuracy": 0.704,
+    "loose_correct": 830,
+    "loose_accuracy": 0.83,
+    "format_compliance": 0.996,
+    "by_family": {
+      "direct": {
+        "n": 117,
+        "strict_accuracy": 0.6495726495726496,
+        "loose_accuracy": 0.9914529914529915,
+        "format_compliance": 1.0
+      },
+      "direct_yes_no": {
+        "n": 116,
+        "strict_accuracy": 1.0,
+        "loose_accuracy": 1.0,
+        "format_compliance": 1.0
+      },
+      "equality": {
+        "n": 195,
+        "strict_accuracy": 0.8461538461538461,
+        "loose_accuracy": 0.8461538461538461,
+        "format_compliance": 1.0
+      },
+      "ranking": {
+        "n": 156,
+        "strict_accuracy": 0.2564102564102564,
+        "loose_accuracy": 0.2692307692307692,
+        "format_compliance": 0.9743589743589743
+      },
+      "three_hop": {
+        "n": 150,
+        "strict_accuracy": 0.82,
+        "loose_accuracy": 0.9666666666666667,
+        "format_compliance": 1.0
+      },
+      "two_hop": {
+        "n": 213,
+        "strict_accuracy": 0.6901408450704225,
+        "loose_accuracy": 0.9061032863849765,
+        "format_compliance": 1.0
+      },
+      "two_hop_reversed_wording": {
+        "n": 53,
+        "strict_accuracy": 0.6981132075471698,
+        "loose_accuracy": 1.0,
+        "format_compliance": 1.0
+      }
+    }
+  },
+  "comparison": {
+    "strict_improvement": 0.704,
+    "mcnemar": {
+      "finetuned_only_correct": 704,
+      "pretrained_only_correct": 0,
+      "p_value": 2.37636445786895e-212,
+      "significant_at_0.05": true
+    },
+    "pretrained_ci95": [
+      0.0,
+      0.003826898586390522
+    ],
+    "finetuned_ci95": [
+      0.6749691107828159,
+      0.7314695145939368
+    ]
+  }
+}
