@@ -26,7 +26,9 @@ else:
 print(f"Evaluating reasoning for: {DISPLAY_NAME}")
 
 # Paths
-PROJECT_ROOT = EVAL_DIR.parent.parent  # project root
+PROJECT_ROOT = EVAL_DIR.parent.parent  
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 REASONING_DATASET_DIR = PROJECT_ROOT / "reasoning_dataset" / LANGUAGE
 TEST_JSONL = REASONING_DATASET_DIR / "test.jsonl"
 CONFIG_FILE = LANGUAGE_DIR / "configs" / "config1.yaml"
@@ -229,7 +231,7 @@ def main():
 
     # Load test data
     print("Loading reasoning test dataset...")
-    examples = load_test_data(limit=100)  
+    examples = load_test_data(limit=1000)  
     print(f"Loaded {len(examples)} test examples "f"from {TEST_JSONL}") 
 
     # Evaluate pretrained model
@@ -246,7 +248,7 @@ def main():
         print(f"  Accuracy: {pretrained_acc:.4f} ({pretrained_correct}/{pretrained_total})")
     except Exception as e:
         print(f"Error evaluating pretrained model: {e}")
-        pretrained_acc = 0.0
+        pretrained_acc, pretrained_correct, pretrained_total = 0.0, 0, len(examples)
 
     # Evaluate finetuned model
     print("\n" + "=" * 60)
@@ -262,7 +264,7 @@ def main():
         print(f"  Accuracy: {finetuned_acc:.4f} ({finetuned_correct}/{finetuned_total})")
     except Exception as e:
         print(f"Error evaluating finetuned model: {e}")
-        finetuned_acc = 0.0
+        finetuned_acc, finetuned_correct, finetuned_total = 0.0, 0, len(examples)
 
     # Create visualization
     print("\n" + "=" * 60)
