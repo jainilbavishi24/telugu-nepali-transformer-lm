@@ -53,10 +53,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 HF_REPO = "iconically-mine/LMA-individual-project"
 
-# Generation budget. Targets in this dataset are short (~60-80 tokens); 120
-# leaves headroom for a rambling pretrained model without wasting compute.
 MAX_NEW_TOKENS = 120
-EVAL_LIMIT = None  # None = use the whole test file
+EVAL_LIMIT = 1000  # None = use the whole test file
 
 # Answer markers, tried in order. Add your Telugu marker here if it differs.
 ANSWER_MARKERS = ("उत्तर:", "సమాధానం:", "జవాబు:")
