@@ -11,10 +11,10 @@ import evaluate
 # =========================================================
 
 FILES = {
-    "Greedy": "Nepalese/generation_examples_greedy.json",
-    "Temp 0.5": "Nepalese/generation_examples_0_5.json",
-    "Temp 1.0": "Nepalese/generation_examples_1_0.json",
-    "Temp 1.5": "Nepalese/generation_examples_1_5.json",
+    "Greedy": "Nepalese/generation_examples_greedy_finetuned.json",
+    "Temp 0.5": "Nepalese/generation_examples_0_5_finetuned.json",
+    "Temp 1.0": "Nepalese/generation_examples_1_0_finetuned.json",
+    "Temp 1.5": "Nepalese/generation_examples_1_5_finetuned.json",
 }
 
 TOKENIZER_MODEL = "Nepalese/tokenizer/models/nepalese_sentencepiece_bpe_6k/nepalese_bpe_6k.model"
@@ -269,7 +269,7 @@ if __name__ == "__main__":
     # -----------------------------------------------------
 
     with open(
-        "generation_metrics.json",
+        "Nepalese/outputs/finetuned/generation_metrics.json",
         "w",
         encoding="utf-8"
     ) as f:
