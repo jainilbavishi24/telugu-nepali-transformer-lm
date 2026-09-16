@@ -22,19 +22,19 @@ import sentencepiece as spm
 device = torch.device('cuda' if torch.cuda.is_available() else 'mps')
 
 
-CONFIG_FILE = 'Telugu`````/configs/config1.yaml'
+CONFIG_FILE = 'Telugu/configs/config1.yaml'
 with open(CONFIG_FILE, 'r') as f:
     config = yaml.safe_load(f)
 
 
 LANGUAGE ='Telugu'
 REPO_ID ='iconically-mine/LMA-individual-project'
-FILE_NAME = f'{LANGUAGE}/best_{LANGUAGE.lower()}.pt'
+FILE_NAME = 'finetuned/Telugu/best_telugu_finetuned.pt'
 
 hf_hub_download(
     repo_id=REPO_ID,
     filename=FILE_NAME,
-    local_dir=f'.hf_cache/'
+    local_dir=f'.hf_cache/finetuned'
 )
 
 class Metrics:
@@ -234,7 +234,7 @@ if __name__ == "__main__":
         prefix_len=128,
         max_new_tokens=128,
         temperature=1.5,
-        output_path="Telugu/generation_examples_1_5.json",
+        output_path="Telugu/generation_examples_1_5_finetuned.json",
     )
 
     metrics.generate_examples(
@@ -242,7 +242,7 @@ if __name__ == "__main__":
         prefix_len=128,
         max_new_tokens=128,
         temperature=1.0,
-        output_path="Telugu/generation_examples_1_0.json",
+        output_path="Telugu/generation_examples_1_0_finetuned.json",
     )
 
     metrics.generate_examples(
@@ -250,7 +250,7 @@ if __name__ == "__main__":
         prefix_len=128,
         max_new_tokens=128,
         temperature=0.5,
-        output_path="Telugu/generation_examples_0_5.json",
+        output_path="Telugu/generation_examples_0_5_finetuned.json",
     )
 
     metrics.generate_examples(
@@ -259,5 +259,5 @@ if __name__ == "__main__":
         max_new_tokens=128,
         temperature=1.5,
         greedy=True,
-        output_path="Telugu/generation_examples_greedy.json",
+        output_path="Telugu/generation_examples_greedy_finetuned.json",
     )
