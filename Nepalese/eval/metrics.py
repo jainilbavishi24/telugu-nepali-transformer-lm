@@ -29,7 +29,7 @@ with open(CONFIG_FILE, 'r') as f:
 
 LANGUAGE ='Nepalese'
 REPO_ID ='iconically-mine/LMA-individual-project'
-FILE_NAME = f'{LANGUAGE}/best_{LANGUAGE.lower()}.pt'
+FILE_NAME = 'finetuned/Nepalese/best_nepalese_finetuned.pt'
 
 hf_hub_download(
     repo_id=REPO_ID,
@@ -238,3 +238,36 @@ if __name__ == "__main__":
     ppl, bpb = metrics.compute_PPL_BPB()
     print(f"Perplexity: {ppl}")
     print(f"Bits per token: {bpb}")
+
+    metrics.generate_examples(
+        num_examples=100,
+        prefix_len=128,
+        max_new_tokens=128,
+        temperature=1.5,
+        output_path="Nepalese/generation_examples_1_5_finetuned.json",
+    )
+
+    metrics.generate_examples(
+        num_examples=100,
+        prefix_len=128,
+        max_new_tokens=128,
+        temperature=1.0,
+        output_path="Nepalese/generation_examples_1_0_finetuned.json",
+    )
+
+    metrics.generate_examples(
+        num_examples=100,
+        prefix_len=128,
+        max_new_tokens=128,
+        temperature=0.5,
+        output_path="Nepalese/generation_examples_0_5_finetuned.json",
+    )
+
+    metrics.generate_examples(
+        num_examples=100,
+        prefix_len=128,
+        max_new_tokens=128,
+        temperature=1.5,
+        greedy=True,
+        output_path="Nepalese/generation_examples_greedy_finetuned.json",
+    )
