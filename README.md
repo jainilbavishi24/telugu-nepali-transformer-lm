@@ -363,4 +363,4 @@ Built over about a month as an individual course project for Language Modeling &
 in three phases: corpus + tokenizer, architecture + pretraining, and reasoning finetuning +
 evaluation. The commit history follows those phases.
 
-Author: A Sai Rithvik (2023102060)
+Author: Jainil Bavishi
